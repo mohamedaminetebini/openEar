@@ -1,0 +1,23 @@
+[package]
+name = "openear"
+version = "0.1.0"
+description = "Local headphone and desktop audio controller"
+authors = ["Openear contributors"]
+license = "MIT"
+edition = "2021"
+rust-version = "1.90"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+wait-timeout = "0.2"
+
+[profile.release]
+strip = true
+lto = "thin"

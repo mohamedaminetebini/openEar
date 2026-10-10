@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Openear",
+  "version": "0.1.0",
+  "identifier": "io.openear.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm dev:ui",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "pnpm build:ui",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Openear",
+        "width": 960,
+        "height": 680,
+        "minWidth": 800,
+        "minHeight": 560
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'",
+      "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost ws://127.0.0.1:5173; object-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "appimage"],
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "linux": {
+      "deb": {
+        "depends": ["pipewire", "pipewire-pulse", "pulseaudio-utils", "alsa-utils"]
+      }
+    },
+    "shortDescription": "Headphone controls and desktop equalizer",
+    "category": "Music"
+  }
+}

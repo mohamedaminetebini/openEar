@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.tsbuildinfo
+playwright-report/
+test-results/
+.env*
+!.env.example
+
+src-tauri/target/
+src-tauri/gen/

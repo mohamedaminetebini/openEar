@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Only the bundled main window may read devices or apply validated audio settings.",
+  "windows": ["main"],
+  "permissions": ["allow-audio-state", "allow-audio-command"]
+}
