@@ -1,69 +1,62 @@
 # Openear
 
-A local-first desktop headphone controller built with Tauri, Rust, React 19, and strict TypeScript. The app detects Linux audio outputs and the supported H858 USB receiver automatically, applies a real ten-band system equalizer, and saves sound profiles locally.
+A desktop headphone controller for Linux. Openear routes system audio through a ten-band equalizer, saves sound profiles, and works with any headphones that PipeWire can play to, over USB or Bluetooth.
 
-Openear is desktop-only. There is no browser hardware controller, HTTP companion, token pairing, or hosted web product. Vite builds the interface embedded inside the desktop app.
+Built with Tauri 2, Rust, React 19, and strict TypeScript.
+
+## Features
+
+- **Any output:** lists the audio outputs PipeWire sees, with USB and Bluetooth icons.
+- **Desktop EQ:** ten bands, bypass, and presets, applied to system playback through PipeWire. Turning EQ off restores your previous output.
+- **Sound profiles:** save, rename, duplicate, prefer, and apply EQ settings. Profiles are stored locally.
+- **New devices:** when a USB or Bluetooth headset connects while EQ is off, Openear makes it the default output.
+- **Brand themes:** headphones are themed only when their hardware IDs match a known device. Everything else uses a neutral theme. Redragon H858 is the first brand supported.
+- **Light and dark mode**, keyboard navigation, and a tray icon.
 
 ## Install
 
-Open the generated `Openear_0.1.0_amd64.deb` in your distribution's package installer, then launch **Openear**. End users need no Node.js, pnpm, Rust, terminal, or browser permissions. Use Linux with a working PipeWire session; the Debian package declares the required audio utilities and GUI libraries.
+Open the `.deb` (or run the AppImage) and launch **Openear**. You need a Linux desktop running PipeWire. The Debian package installs the required audio tools.
 
-In **Sound**, choose your output and click **Enable desktop EQ**. Presets, saved profiles, and band adjustments apply to desktop playback routed through Openear. **Device** contains actual receiver playback and microphone controls. Turn off desktop EQ to restore the previous output. Closing the window while EQ is active keeps it running; use **Quit and restore audio** in the tray menu to exit.
+Build the packages yourself with `pnpm build`. Installers are written to `src-tauri/target/release/bundle/`.
 
-See [installation and native lifecycle](docs/desktop.md). AppImage builds are also available, but require the host audio tools to be installed already. Windows and macOS audio backends are not implemented.
+## Using it
 
-## Tested hardware
+1. Choose your headphones in **Sound**.
+2. Turn on **Desktop EQ**. Adjust bands or pick a preset.
+3. Save the result as a profile in **Profiles**.
 
-| Brand    | Model | USB receiver | Status                                                |
-| -------- | ----- | ------------ | ----------------------------------------------------- |
-| Redragon | H858  | `3206:0881`  | Receiver playback and microphone controls, desktop EQ |
+Profiles only change sound while Desktop EQ is on. Closing the window keeps EQ running in the background; use **Quit and restore audio** from the tray to exit and restore your output.
 
-The H858's internal 7.1 is controlled by its physical button. Battery and ANC are not available: the H858 has no ANC, and no verified protocol exposes battery.
+## Limits
 
-## Manufacturer themes
+- Linux with PipeWire only. Windows and macOS backends are not implemented.
+- Desktop EQ processes audio played through Openear's output. Apps pinned to another output, direct ALSA/JACK clients, and passthrough audio bypass it.
+- Desktop EQ does not change headset firmware settings. Headset-specific features (such as hardware EQ, ANC, or battery) are not available unless a verified integration exists.
+- Bluetooth connections can drop; EQ stops if the headset disconnects.
 
-A recognized, selected H858 receiver (`3206:0881`) uses Redragon's official white/red logo and a palette derived from it. Other outputs use a neutral Openear theme. Switching outputs or unplugging the receiver updates the theme. Branding follows verified identifiers, not a marketing name or a guess based on an OEM string. It never implies unsupported controls.
-
-Manufacturer assets are bundled locally for offline use. See [asset attribution](public/brands/ATTRIBUTION.md). Openear is independent of manufacturers; their logos and trademarks are excluded from the project's MIT license.
-
-## Features and limits
-
-- Actual Linux audio-output and H858 USB discovery, with no serial numbers read or stored.
-- PipeWire system playback EQ: ten bands, fourteen presets, live updates, bypass, conservative boost headroom, and reversible routing.
-- Real receiver playback volume/mute, mic gain/mute, and mic automatic gain using ALSA.
-- Profiles: create, rename, update, duplicate, delete, prefer, apply, and persist in IndexedDB.
-- Manufacturer-aware appearance, keyboard controls, visible focus, reduced motion, narrow-window support, and safe copyable diagnostics.
-
-No proprietary manufacturer protocol is implemented. H858 battery, ANC, internal 7.1, hardware EQ, and physical-button synchronization remain unavailable. Automatic microphone gain is not ANC. A detected receiver does not prove that its wireless headset is switched on. See [actual compatibility](SUPPORTED_DEVICES.md) and [protocol research](docs/protocol-research.md).
-
-Applications pinned to another output, direct ALSA/JACK clients, passthrough audio, and microphone capture can bypass playback EQ. Select Openear's audio output in those apps where possible. Software EQ does not change headset firmware settings.
+See [supported devices](SUPPORTED_DEVICES.md) for what has been verified on real hardware.
 
 ## Development
 
-Use Node.js 22.12+, pnpm 11.15.1, Rust 1.90+ (tested with 1.95), and [Tauri's Linux development prerequisites](https://v2.tauri.app/start/prerequisites/#linux).
+Requirements: Node.js 22.12+, pnpm 11, Rust 1.90+, and [Tauri's Linux prerequisites](https://v2.tauri.app/start/prerequisites/#linux).
 
 ```bash
 pnpm install
-pnpm dev
-pnpm build
-pnpm typecheck
+pnpm dev          # run the desktop app
+pnpm test         # unit tests
+pnpm test:e2e     # UI tests (run `pnpm exec playwright install chromium` once)
+pnpm desktop:test # Rust tests
 pnpm lint
-pnpm test
-pnpm test:e2e
+pnpm typecheck
 pnpm format:check
-pnpm desktop:test
 ```
 
-`pnpm dev` starts the native app and its internal Vite interface server. `pnpm build` creates desktop installers under `src-tauri/target/release/bundle/`. `pnpm dev:ui` and `pnpm build:ui` are internal interface tooling; opening that interface in a browser shows a desktop-app launch message and exposes no hardware controls.
+Architecture, the native audio lifecycle, and the security model are in [docs/architecture.md](docs/architecture.md) and [docs/desktop.md](docs/desktop.md). Contribution rules are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Playwright renders the desktop interface with controlled Tauri IPC fixtures. Install its development browser with `pnpm exec playwright install chromium`. Those tests validate UI behavior, not physical hardware. The opt-in Rust hardware test and actual Tauri/WebKit smoke workflow are documented in [desktop verification](docs/desktop.md#physical-and-native-ui-verification).
+## Privacy
 
-## Privacy, storage, and security
+No accounts, analytics, cloud storage, or network requests. Profiles and preferences stay on your computer.
 
-No accounts, analytics, cloud storage, device uploads, or runtime remote requests. Only the bundled main window receives two restricted native audio commands. There is no local HTTP listener. Rust validates commands, bounds gains, serializes operations, and uses subprocess argument arrays without a shell.
+## License
 
-Existing desktop profiles and preferences retain the same IndexedDB origin and schema. Removing the browser controller does not clear local databases. Legacy manufacturer-setting profiles are retained but refused until a verified integration exists. Old browser-site profiles belong to that site's separate storage and are not automatically migrated.
-
-Normal shutdown restores routing; forced termination or an audio-server crash can prevent restoration. Select the physical output in system sound settings if needed. No autostart service, permanent audio configuration, or secrets are installed.
-
-Read [architecture](docs/architecture.md) and [contributing](CONTRIBUTING.md). MIT licensed, excluding third-party manufacturer assets.
+MIT, excluding third-party manufacturer logos and trademarks. See [public/brands/ATTRIBUTION.md](public/brands/ATTRIBUTION.md).
