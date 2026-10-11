@@ -23,6 +23,7 @@ it('automatically connects through desktop IPC and applies EQ without an HTTP re
     target: null,
     eq: { enabled: true, bands: Array<number>(10).fill(0) },
     receiver: null,
+    pairedDevices: [],
     usbDevice: null,
     error: null,
   };
@@ -62,4 +63,32 @@ it('reports invalid native responses without exposing their contents', async () 
   await initializeDesktopAudio();
   expect(useNativeAudio.getState().error).toContain('incompatible');
   expect(useNativeAudio.getState().paired).toBe(false);
+});
+
+it('sends output volume without toggling the panel-wide busy state', async () => {
+  vi.stubGlobal('isTauri', true);
+  const base = {
+    outputs: [{ id: 'output', name: 'Output', receiver: false, transport: 'other', volume: 40 }],
+    active: false,
+    target: null,
+    eq: { enabled: true, bands: Array<number>(10).fill(0) },
+    receiver: null,
+    pairedDevices: [],
+    usbDevice: null,
+    error: null,
+  };
+  const busyValues: boolean[] = [];
+  const unsubscribe = useNativeAudio.subscribe((store) => busyValues.push(store.busy));
+  mockIPC((command, payload) => {
+    if (command === 'audio_state') return base;
+    const input = (payload as { input: unknown }).input;
+    expect(nativeCommandSchema.safeParse(input).success).toBe(true);
+    return { ...base, outputs: [{ ...base.outputs[0], volume: 55 }] };
+  });
+  await initializeDesktopAudio();
+  busyValues.length = 0;
+  await nativeOperation({ operation: 'outputVolume', output: 'output', value: 55 });
+  unsubscribe();
+  expect(busyValues.includes(true)).toBe(false);
+  expect(useNativeAudio.getState().state?.outputs[0]?.volume).toBe(55);
 });

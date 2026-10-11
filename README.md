@@ -25,7 +25,7 @@ Build the packages yourself with `pnpm build`. Installers are written to `src-ta
 2. Turn on **Desktop EQ**. Adjust bands or pick a preset.
 3. Save the result as a profile in **Profiles**.
 
-Profiles only change sound while Desktop EQ is on. Closing the window keeps EQ running in the background; use **Quit and restore audio** from the tray to exit and restore your output.
+Profiles only change sound while Desktop EQ is on. The close button minimizes Openear, and EQ keeps running in the background. Use **Quit and restore audio** in the tray menu to exit and restore your output.
 
 ## Limits
 

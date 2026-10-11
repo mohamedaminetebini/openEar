@@ -3,6 +3,7 @@ dist
 pnpm-lock.yaml
 playwright-report
 test-results
+learn
 
 src-tauri/target
 src-tauri/gen

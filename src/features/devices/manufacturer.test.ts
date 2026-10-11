@@ -9,6 +9,7 @@ const state: NativeState = {
   active: false,
   target: null,
   defaultOutput: null,
+  pairedDevices: [],
   eq: { enabled: true, bands: Array<number>(10).fill(0) },
   receiver: null,
   usbDevice: {

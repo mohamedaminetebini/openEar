@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Cable } from 'lucide-react';
+import { Battery, Cable } from 'lucide-react';
 import { useNativeAudio } from '@/features/system-audio/store';
 import { TransportIcon } from '@/features/system-audio/transport-icon';
 import { manufacturerForOutput } from '../manufacturer';
@@ -11,7 +11,8 @@ function DeviceOverviewBase() {
   );
   const usb = state?.usbDevice;
   const selected = useNativeAudio((store) => store.selectedOutput);
-  const transport = state?.outputs.find((output) => output.id === selected)?.transport ?? 'other';
+  const chosen = state?.outputs.find((output) => output.id === selected);
+  const transport = chosen?.transport ?? 'other';
   return (
     <section className="panel device-panel" aria-labelledby="device-heading">
       <div className="device-summary">
@@ -27,6 +28,17 @@ function DeviceOverviewBase() {
           </p>
         </div>
       </div>
+      {chosen?.battery != null && (
+        <dl className="device-details">
+          <div>
+            <dt>
+              <Battery />
+              Headset battery
+            </dt>
+            <dd>{chosen.battery}%</dd>
+          </div>
+        </dl>
+      )}
       {usb && (
         <dl className="device-details">
           <div>
@@ -56,8 +68,7 @@ function DeviceOverviewBase() {
         <h3>Available on this receiver</h3>
         <p>Playback volume and mute, microphone gain and mute, automatic gain.</p>
         <p className="fine-print">
-          Battery, ANC, and internal 7.1 are not available. USB detection does not confirm the
-          wireless link.
+          ANC and internal 7.1 are not available. USB detection does not confirm the wireless link.
         </p>
       </div>
     </section>

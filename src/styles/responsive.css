@@ -1,0 +1,159 @@
+@media (max-height: 760px) {
+  .app-sidebar {
+    padding: 16px 12px;
+  }
+  .manufacturer-identity {
+    padding: 12px 12px 10px;
+  }
+  .manufacturer-identity img {
+    width: 84px;
+    height: 50px;
+    margin-bottom: 6px;
+  }
+  .main-content {
+    padding: 20px 24px 24px;
+  }
+  .page-heading {
+    margin-bottom: 14px;
+  }
+  .page-heading h1 {
+    font-size: 28px;
+  }
+  .panel {
+    margin-bottom: 12px;
+  }
+  .section-bar {
+    padding: 11px 16px;
+  }
+  .settings-explanation,
+  .device-summary {
+    padding: 14px 16px;
+  }
+  .eq-console {
+    height: 260px;
+    padding: 10px 16px;
+  }
+  .eq-band {
+    gap: 6px;
+  }
+  .eq-band > [data-slot='slider'] {
+    min-height: 170px;
+  }
+  .gain-scale {
+    padding-top: 26px;
+    padding-bottom: 20px;
+  }
+}
+
+@media (max-width: 1050px) {
+  .app-shell {
+    grid-template-columns: 190px minmax(0, 1fr);
+  }
+  .app-sidebar {
+    width: 190px;
+  }
+  .main-content {
+    padding: 24px;
+  }
+  .workspace-header {
+    padding: 0 24px;
+  }
+  .eq-bands {
+    gap: 10px;
+  }
+  .eq-console {
+    gap: 10px;
+  }
+  .profile-row {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+  .app-sidebar {
+    position: static;
+    width: auto;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    padding: 12px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-strong);
+    gap: 16px;
+  }
+  .app-identity {
+    padding: 0;
+  }
+  .manufacturer-identity {
+    display: none;
+  }
+  .app-sidebar nav {
+    flex: 1;
+    flex-direction: row;
+    justify-content: flex-end;
+    gap: 2px;
+    margin-top: 0;
+  }
+  .app-sidebar nav button {
+    padding: 0 10px 0 14px;
+    gap: 6px;
+    font-size: 13px;
+  }
+  .app-workspace {
+    grid-column: 1;
+    min-height: calc(100vh - 66px);
+  }
+  .workspace-header {
+    padding: 0 18px;
+    height: 48px;
+    font-size: 12px;
+  }
+  .main-content {
+    padding: 22px 16px;
+  }
+  .output-actions {
+    flex-direction: column;
+    gap: 14px;
+    align-items: stretch;
+  }
+  .eq-console {
+    padding: 10px 12px;
+    gap: 8px;
+    height: 216px;
+  }
+  .gain-scale {
+    width: 24px;
+    font-size: 11px;
+  }
+  .eq-bands {
+    gap: 8px;
+  }
+  .eq-band output,
+  .eq-band > span {
+    font-size: 11px;
+  }
+  .section-bar {
+    padding: 14px 16px;
+  }
+  .preset-toolbar {
+    padding-left: 16px;
+    padding-right: 16px;
+    flex-wrap: wrap;
+  }
+  .eq-foot {
+    padding: 14px 16px;
+    gap: 12px;
+  }
+  .eq-foot > span {
+    font-size: 12px;
+  }
+  .headroom-hint {
+    display: none;
+  }
+  .profile-actions {
+    margin-left: auto;
+  }
+}

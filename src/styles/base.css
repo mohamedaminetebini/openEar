@@ -1,0 +1,132 @@
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--foreground);
+  --color-popover: var(--surface-raised);
+  --color-popover-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--sunk);
+  --color-secondary-foreground: var(--foreground);
+  --color-muted: var(--sunk);
+  --color-muted-foreground: var(--text-secondary);
+  --color-accent: var(--sunk);
+  --color-accent-foreground: var(--foreground);
+  --color-destructive: #b3262e;
+  --color-border: var(--border-strong);
+  --color-input: var(--border-strong);
+  --color-ring: var(--accent-ink);
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+}
+
+:root {
+  color-scheme: light;
+  --background: #ece9e1;
+  --surface: #f7f5ef;
+  --surface-raised: #fbfaf6;
+  --sunk: #e3dfd3;
+  --foreground: #1c1d20;
+  --text-soft: #46453f;
+  --text-secondary: #6b685f;
+  --text-muted: #8c887d;
+  --border: #d7d2c5;
+  --border-strong: #b9b3a3;
+  --primary: #1c1d20;
+  --primary-foreground: #f7f5ef;
+  --accent-ink: #2b4bdb;
+  --lamp: #2b4bdb;
+  --danger-text: #7a1d23;
+  --danger-border: #d99aa0;
+  --danger-bg: #f5dfe1;
+  --font-display: 'Roboto Condensed', 'Arial Narrow', sans-serif;
+  --font-body: Inter, 'Helvetica Neue', Helvetica, sans-serif;
+  --font-mono: 'Fira Mono', 'DejaVu Sans Mono', ui-monospace, monospace;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+:root[data-manufacturer='redragon'] {
+  --primary: #e60012;
+  --primary-foreground: #ffffff;
+  --accent-ink: #e60012;
+  --lamp: #e60012;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --background: #0d0e10;
+  --surface: #16171a;
+  --surface-raised: #1c1d21;
+  --sunk: #101114;
+  --foreground: #ececf0;
+  --text-soft: #b8b9c2;
+  --text-secondary: #9a9ca6;
+  --text-muted: #6f717b;
+  --border: rgb(255 255 255 / 0.08);
+  --border-strong: rgb(255 255 255 / 0.15);
+  --primary: #ececf0;
+  --primary-foreground: #0d0e10;
+  --accent-ink: #9db0ff;
+  --lamp: #9db0ff;
+  --danger-text: #ffb3b9;
+  --danger-border: #6b3339;
+  --danger-bg: #2a171a;
+}
+:root[data-theme='dark'][data-manufacturer='redragon'] {
+  --primary: #e60012;
+  --primary-foreground: #ffffff;
+  --accent-ink: #ff5b66;
+  --lamp: #ff5b66;
+}
+
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 360px;
+  background: var(--background);
+  color: var(--foreground);
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button,
+a,
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+}
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible,
+pre:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: 3px;
+}
+p {
+  margin-top: 0;
+}
+svg {
+  flex-shrink: 0;
+}
+h1,
+h2,
+h3 {
+  font-weight: 600;
+}

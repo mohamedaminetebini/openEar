@@ -43,12 +43,19 @@ export function App() {
       </a>
       <aside className="app-sidebar">
         <div className="app-identity">
-          <Headphones />
+          <img className="mark-dark" src="/openear-mark.png" alt="" width="256" height="256" />
+          <img
+            className="mark-light"
+            src="/openear-mark-light.png"
+            alt=""
+            width="256"
+            height="256"
+          />
           <span>Openear</span>
         </div>
         <div className="manufacturer-identity">
           {brand.logo ? (
-            <img src={brand.logo} alt="Redragon" width="128" height="76" />
+            <img src={brand.logo} alt={brand.name} width="128" height="76" />
           ) : (
             <Headphones aria-hidden="true" className="neutral-logo" />
           )}

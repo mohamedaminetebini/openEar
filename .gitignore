@@ -8,3 +8,7 @@ test-results/
 
 src-tauri/target/
 src-tauri/gen/
+
+# Local learning material (not published)
+learn/
+docs/
