@@ -48,7 +48,6 @@ function ProfilesPanelBase({ compact = false }: { compact?: boolean }) {
     }
   };
   const apply = (profile: Profile) => {
-    // The profile only reaches system audio while desktop EQ is on.
     const listening = useNativeAudio.getState().state?.active === true;
     return run(
       profile.id,

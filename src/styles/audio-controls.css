@@ -1,0 +1,15 @@
+.noise-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.noise-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

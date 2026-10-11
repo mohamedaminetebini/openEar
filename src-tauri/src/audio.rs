@@ -1,3 +1,8 @@
+use crate::aap::{self, NoiseMode};
+use crate::bluetooth::{
+    bluetooth_battery, bluetooth_modalias, brand_for_modalias, connect_headset, is_paired,
+    paired_devices, valid_address, PairedDevice,
+};
 use crate::eq::{Eq, SINK};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -5,6 +10,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs,
     io::Read,
+    path::Path,
     process::{Child, Command as Process, Stdio},
     thread,
     time::Duration,
@@ -12,8 +18,11 @@ use std::{
 use tempfile::TempDir;
 use wait_timeout::ChildExt;
 
-type Result<T> = std::result::Result<T, String>;
-fn command(name: &str, args: &[&str]) -> Result<String> {
+pub(crate) type Result<T> = std::result::Result<T, String>;
+pub(crate) fn command(name: &str, args: &[&str]) -> Result<String> {
+    command_within(name, args, Duration::from_secs(5))
+}
+pub(crate) fn command_within(name: &str, args: &[&str], limit: Duration) -> Result<String> {
     let mut child = Process::new(name)
         .args(args)
         .stdout(Stdio::piped())
@@ -28,7 +37,7 @@ fn command(name: &str, args: &[&str]) -> Result<String> {
             .read_to_end(&mut bytes)
             .map(|_| bytes)
     });
-    let status = match child.wait_timeout(Duration::from_secs(5)) {
+    let status = match child.wait_timeout(limit) {
         Ok(Some(status)) => status,
         _ => {
             let _ = child.kill();
@@ -57,6 +66,20 @@ struct Sink {
     description: String,
     #[serde(default)]
     properties: HashMap<String, Value>,
+    #[serde(default)]
+    volume: HashMap<String, Value>,
+}
+fn sink_volume(sink: &Sink) -> Option<u8> {
+    sink.volume
+        .values()
+        .next()?
+        .get("value_percent")?
+        .as_str()?
+        .trim_end_matches('%')
+        .trim()
+        .parse::<u32>()
+        .ok()
+        .map(|value| value.min(100) as u8)
 }
 #[derive(Deserialize)]
 struct Stream {
@@ -164,6 +187,15 @@ struct Output {
     receiver: bool,
     transport: &'static str,
     brand: Option<&'static str>,
+    battery: Option<u8>,
+    address: Option<String>,
+    volume: Option<u8>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NoiseState {
+    address: String,
+    mode: NoiseMode,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -175,19 +207,47 @@ pub struct Snapshot {
     receiver: Option<Receiver>,
     usb_device: Option<Usb>,
     default_output: Option<String>,
+    paired_devices: Vec<PairedDevice>,
+    noise: Option<NoiseState>,
     error: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(tag = "operation", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Command {
-    Start { target: String, eq: Eq },
-    Eq { eq: Eq },
+    Start {
+        target: String,
+        eq: Eq,
+    },
+    Eq {
+        eq: Eq,
+    },
     Stop {},
-    Volume { value: u8 },
-    MicGain { value: u8 },
-    Mute { value: bool },
-    MicMute { value: bool },
-    AutoGain { value: bool },
+    Volume {
+        value: u8,
+    },
+    MicGain {
+        value: u8,
+    },
+    Mute {
+        value: bool,
+    },
+    MicMute {
+        value: bool,
+    },
+    AutoGain {
+        value: bool,
+    },
+    Connect {
+        address: String,
+    },
+    OutputVolume {
+        output: String,
+        value: u8,
+    },
+    Noise {
+        address: String,
+        mode: Option<NoiseMode>,
+    },
 }
 #[derive(Default)]
 pub struct Audio {
@@ -202,35 +262,9 @@ pub struct Audio {
     error: Option<String>,
     known_sinks: Option<HashSet<String>>,
     modaliases: HashMap<String, Option<String>>,
+    noise: Option<NoiseState>,
+    noise_session: Option<aap::Session>,
 }
-/// Brands recognized from a Bluetooth Modalias. Each entry is a full identifier read from a device the project tests.
-fn brand_for_modalias(modalias: &str) -> Option<&'static str> {
-    match modalias {
-        "bluetooth:v05D6p000Ad0240" => Some("redragon"),
-        _ => None,
-    }
-}
-fn valid_address(address: &str) -> bool {
-    address.len() == 17
-        && address.bytes().enumerate().all(|(index, byte)| {
-            if index % 3 == 2 {
-                byte == b':'
-            } else {
-                byte.is_ascii_hexdigit()
-            }
-        })
-}
-fn bluetooth_modalias(address: &str) -> Option<String> {
-    command("bluetoothctl", &["info", address])
-        .ok()?
-        .lines()
-        .map(str::trim)
-        .find_map(|line| {
-            line.strip_prefix("Modalias:")
-                .map(|value| value.trim().to_string())
-        })
-}
-/// A USB or Bluetooth output that was not in the previous poll.
 fn new_device(known: &HashSet<String>, sinks: &[Sink]) -> Option<String> {
     sinks
         .iter()
@@ -239,9 +273,6 @@ fn new_device(known: &HashSet<String>, sinks: &[Sink]) -> Option<String> {
         .map(|sink| sink.name.clone())
 }
 impl Audio {
-    pub fn is_active(&self) -> bool {
-        self.active
-    }
     pub fn monitor(&mut self) -> Result<()> {
         let sinks = sinks()?;
         if let (Some(known), false) = (&self.known_sinks, self.active) {
@@ -278,11 +309,20 @@ impl Audio {
         }
         self.monitor()?;
         let mut outputs = Vec::new();
+        let mut connected = HashSet::new();
         for sink in sinks()?
             .into_iter()
             .filter(|sink| sink.name != SINK && !sink.name.starts_with(&format!("{SINK}.")))
         {
             let transport = transport(&sink);
+            let volume = sink_volume(&sink);
+            if let Some(address) = sink
+                .properties
+                .get("api.bluez5.address")
+                .and_then(Value::as_str)
+            {
+                connected.insert(address.to_string());
+            }
             let receiver = sink
                 .properties
                 .get("device.vendor.id")
@@ -306,12 +346,30 @@ impl Audio {
                     .and_then(brand_for_modalias),
                 _ => None,
             };
+            let battery = match sink
+                .properties
+                .get("api.bluez5.address")
+                .and_then(Value::as_str)
+            {
+                Some(address) if transport == "bluetooth" && valid_address(address) => {
+                    bluetooth_battery(address)
+                }
+                _ => None,
+            };
             outputs.push(Output {
                 id: sink.name,
                 name: sink.description,
                 receiver,
                 transport,
                 brand,
+                battery,
+                volume,
+                address: sink
+                    .properties
+                    .get("api.bluez5.address")
+                    .and_then(Value::as_str)
+                    .filter(|address| transport == "bluetooth" && valid_address(address))
+                    .map(str::to_string),
             });
         }
         let mut receiver = None;
@@ -349,8 +407,56 @@ impl Audio {
             receiver,
             usb_device,
             default_output,
+            paired_devices: paired_devices(&connected),
+            noise: self.noise.as_ref().map(|noise| NoiseState {
+                address: noise.address.clone(),
+                mode: noise.mode,
+            }),
             error: self.error.clone(),
         })
+    }
+    fn set_output_volume(&mut self, output: &str, value: u8) -> Result<()> {
+        if value > 100 {
+            return Err("Output volume must be between 0 and 100.".into());
+        }
+        if output == SINK || !sinks()?.iter().any(|sink| sink.name == output) {
+            return Err("Select an available audio output.".into());
+        }
+        command("pactl", &["set-sink-volume", output, &format!("{value}%")])?;
+        Ok(())
+    }
+    fn set_noise(&mut self, address: &str, mode: Option<NoiseMode>) -> Result<()> {
+        if !is_paired(address) {
+            return Err("Select a paired headset first.".into());
+        }
+        if self
+            .noise_session
+            .as_ref()
+            .map(|session| session.address.as_str())
+            != Some(address)
+        {
+            self.noise_session = None;
+            self.noise_session = Some(aap::Session::open(address)?);
+        }
+        let result = match (self.noise_session.as_mut(), mode) {
+            (Some(session), Some(mode)) => session.set_mode(mode),
+            (Some(session), None) => session.read_mode(),
+            (None, _) => Err("The headset is not connected.".into()),
+        };
+        match result {
+            Ok(mode) => {
+                self.noise = Some(NoiseState {
+                    address: address.to_string(),
+                    mode,
+                });
+                Ok(())
+            }
+            Err(error) => {
+                self.noise_session = None;
+                self.noise = None;
+                Err(error)
+            }
+        }
     }
     pub fn apply(&mut self, input: Command) -> Result<Snapshot> {
         match input {
@@ -359,6 +465,9 @@ impl Audio {
                 self.start(&target, eq)?;
             }
             Command::Stop {} => self.stop()?,
+            Command::Connect { address } => connect_headset(&address)?,
+            Command::OutputVolume { output, value } => self.set_output_volume(&output, value)?,
+            Command::Noise { address, mode } => self.set_noise(&address, mode)?,
             Command::Eq { eq } => {
                 eq.validate()?;
                 let id = self
@@ -390,7 +499,7 @@ impl Audio {
                     }
                     _ => return Err("Unsupported receiver operation.".into()),
                 };
-                let card = receiver_card().ok_or("Attach the H858 USB receiver first.")?;
+                let card = receiver_card().ok_or("Attach a supported USB receiver first.")?;
                 command("amixer", &["-c", &card, "sset", name, &value])?;
             }
         }
@@ -406,9 +515,7 @@ impl Audio {
             return Err("Select an available audio output.".into());
         }
         if !self.active && sinks()?.iter().any(|sink| sink.name == SINK) {
-            return Err(
-                "Another Openear EQ is running. Disable it before enabling desktop EQ here.".into(),
-            );
+            self.recover_orphaned_eq()?;
         }
         self.stop()?;
         self.previous_default = Some(command("pactl", &["get-default-sink"])?);
@@ -491,6 +598,26 @@ impl Audio {
         }
         result
     }
+    fn recover_orphaned_eq(&mut self) -> Result<()> {
+        let available = sinks()?;
+        let fallback = available
+            .iter()
+            .find(|sink| sink.name != SINK)
+            .ok_or("No audio output is available.")?;
+        reroute_from_eq(&available, fallback, &HashMap::new())?;
+        for pid in orphaned_filter_pids() {
+            let pid = pid.to_string();
+            let _ = command("kill", &["-CONT", &pid]);
+            let _ = command("kill", &["-TERM", &pid]);
+        }
+        for _ in 0..40 {
+            if !sinks()?.iter().any(|sink| sink.name == SINK) {
+                return Ok(());
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        Err("Another Openear EQ is running. Disable it before enabling desktop EQ here.".into())
+    }
     pub fn stop(&mut self) -> Result<()> {
         if self.child.is_none() && self.previous_default.is_none() {
             return Ok(());
@@ -502,31 +629,7 @@ impl Audio {
                 .find(|sink| Some(&sink.name) == self.previous_default.as_ref())
                 .or_else(|| available.iter().find(|sink| sink.name != SINK));
             if let Some(fallback) = fallback {
-                if command("pactl", &["get-default-sink"])? == SINK {
-                    command("pactl", &["set-default-sink", &fallback.name])?;
-                }
-                let eq_sink = available
-                    .iter()
-                    .find(|sink| sink.name == SINK)
-                    .map(|sink| sink.index);
-                for stream in streams()? {
-                    if Some(stream.sink) != eq_sink {
-                        continue;
-                    }
-                    let original = self.previous_streams.get(&stream.index);
-                    let destination = available
-                        .iter()
-                        .find(|sink| Some(&sink.name) == original)
-                        .unwrap_or(fallback);
-                    let _ = command(
-                        "pactl",
-                        &[
-                            "move-sink-input",
-                            &stream.index.to_string(),
-                            &destination.name,
-                        ],
-                    );
-                }
+                reroute_from_eq(&available, fallback, &self.previous_streams)?;
             }
             Ok(())
         })();
@@ -543,6 +646,66 @@ impl Audio {
         result
     }
 }
+fn reroute_from_eq(
+    available: &[Sink],
+    fallback: &Sink,
+    previous: &HashMap<u32, String>,
+) -> Result<()> {
+    if command("pactl", &["get-default-sink"])? == SINK {
+        command("pactl", &["set-default-sink", &fallback.name])?;
+    }
+    let eq_sink = available
+        .iter()
+        .find(|sink| sink.name == SINK)
+        .map(|sink| sink.index);
+    for stream in streams()? {
+        if Some(stream.sink) != eq_sink {
+            continue;
+        }
+        let original = previous.get(&stream.index);
+        let destination = available
+            .iter()
+            .find(|sink| Some(&sink.name) == original)
+            .unwrap_or(fallback);
+        let _ = command(
+            "pactl",
+            &[
+                "move-sink-input",
+                &stream.index.to_string(),
+                &destination.name,
+            ],
+        );
+    }
+    Ok(())
+}
+fn is_eq_filter_command(args: &[&str]) -> bool {
+    match args {
+        ["pipewire", "-c", path] => Path::new(path)
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|dir| dir.to_string_lossy().starts_with("openear-eq-")),
+        _ => false,
+    }
+}
+fn orphaned_filter_pids() -> Vec<u32> {
+    let Ok(entries) = fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let pid = entry.file_name().to_str()?.parse::<u32>().ok()?;
+            let bytes = fs::read(entry.path().join("cmdline")).ok()?;
+            let args = bytes
+                .split(|byte| *byte == 0)
+                .filter(|arg| !arg.is_empty())
+                .map(std::str::from_utf8)
+                .collect::<std::result::Result<Vec<&str>, _>>()
+                .ok()?;
+            is_eq_filter_command(&args).then_some(pid)
+        })
+        .collect()
+}
 impl Drop for Audio {
     fn drop(&mut self) {
         let _ = self.stop();
@@ -551,6 +714,7 @@ impl Drop for Audio {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bluetooth::{parse_battery, parse_bluetooth_devices};
     #[test]
     fn selects_only_newly_connected_usb_or_bluetooth_outputs() {
         let sink = |name: &str, bus: Option<&str>| Sink {
@@ -560,6 +724,7 @@ mod tests {
             properties: bus
                 .map(|bus| HashMap::from([("device.bus".to_string(), Value::from(bus))]))
                 .unwrap_or_default(),
+            volume: HashMap::new(),
         };
         let known: HashSet<String> = ["alsa_output.pci".to_string()].into();
         let sinks = [
@@ -594,6 +759,7 @@ mod tests {
             properties: bus
                 .map(|bus| HashMap::from([("device.bus".to_string(), Value::from(bus))]))
                 .unwrap_or_default(),
+            volume: HashMap::new(),
         };
         assert_eq!(transport(&sink("bluez_output.88_92.1", None)), "bluetooth");
         assert_eq!(
@@ -602,6 +768,64 @@ mod tests {
         );
         assert_eq!(transport(&sink("alsa_output.usb", Some("usb"))), "usb");
         assert_eq!(transport(&sink("alsa_output.pci", None)), "other");
+    }
+    #[test]
+    fn recognizes_only_this_apps_filter_process() {
+        assert!(is_eq_filter_command(&[
+            "pipewire",
+            "-c",
+            "/tmp/openear-eq-abc/filter.conf"
+        ]));
+        assert!(!is_eq_filter_command(&[
+            "pipewire",
+            "-c",
+            "/tmp/other/filter.conf"
+        ]));
+        assert!(!is_eq_filter_command(&[
+            "pipewire",
+            "-c",
+            "/home/user/filter.conf"
+        ]));
+        assert!(!is_eq_filter_command(&["pipewire"]));
+    }
+    #[test]
+    fn reads_output_volume_from_pactl_json() {
+        let sink: Sink = serde_json::from_str(
+            r#"{"index":1,"name":"x","description":"x","volume":{"front-left":{"value":65536,"value_percent":"42%","db":"0.00 dB"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(sink_volume(&sink), Some(42));
+        let loud: Sink = serde_json::from_str(
+            r#"{"index":1,"name":"x","description":"x","volume":{"front-left":{"value_percent":"130%"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(sink_volume(&loud), Some(100));
+    }
+    #[test]
+    fn parses_battery_percentage_from_bluetoothctl_info() {
+        assert_eq!(parse_battery("\tBattery Percentage: 0x5a (90)\n"), Some(90));
+        assert_eq!(parse_battery("Battery Percentage: 0x00 (0)"), Some(0));
+        assert_eq!(parse_battery("Battery Percentage: 0x65 (101)"), None);
+        assert_eq!(parse_battery("Name: headset"), None);
+    }
+    #[test]
+    fn parses_paired_device_list_and_skips_malformed_lines() {
+        let text = "Device 77:35:D9:7D:14:7B H858 \nDevice bad-address Ignored\nnot a device\nDevice AC:80:0A:22:96:78 WH-1000XM4\n";
+        assert_eq!(
+            parse_bluetooth_devices(text),
+            vec![
+                ("77:35:D9:7D:14:7B".to_string(), "H858".to_string()),
+                ("AC:80:0A:22:96:78".to_string(), "WH-1000XM4".to_string()),
+            ]
+        );
+    }
+    #[test]
+    fn rejects_connect_to_unpaired_address() {
+        assert!(Audio::default()
+            .apply(Command::Connect {
+                address: "00:00:00:00:00:00".into()
+            })
+            .is_err());
     }
     #[test]
     fn rejects_unknown_and_malformed_commands() {
@@ -637,7 +861,7 @@ mod tests {
         assert!(mixer("Mono: [101%] [on]").is_err());
     }
     #[test]
-    #[ignore = "Requires local PipeWire and H858 receiver; briefly routes desktop playback"]
+    #[ignore = "Requires local PipeWire and a supported USB receiver; briefly routes desktop playback"]
     fn physical_receiver_and_routing_round_trip() {
         let mut audio = Audio::default();
         let snapshot = audio.snapshot().unwrap();

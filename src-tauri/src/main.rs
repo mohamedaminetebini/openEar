@@ -1,13 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod aap;
 mod audio;
+mod bluetooth;
 mod eq;
+mod tray;
 use audio::{Audio, Command, Snapshot};
 use std::sync::{Arc, Mutex};
-use tauri::{
-    menu::{Menu, MenuEvent, MenuItem},
-    tray::TrayIconBuilder,
-    AppHandle, Manager,
-};
+use tauri::{AppHandle, Manager};
 
 #[derive(Clone, Default)]
 struct Native(Arc<Mutex<Audio>>);
@@ -41,43 +40,25 @@ async fn audio_command(
     .map_err(|_| "Audio task failed.".to_string())?
 }
 
-fn menu_action(app: &AppHandle, event: MenuEvent) {
-    match event.id.as_ref() {
-        "show" => {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
-        }
-        "quit" => app.exit(0),
-        _ => {}
+pub(crate) fn show_main_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
     }
 }
+
+struct TrayAvailable(bool);
 
 fn main() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
-            }
+            show_main_window(app)
         }))
         .manage(Native::default())
         .invoke_handler(tauri::generate_handler![audio_state, audio_command])
-        .on_menu_event(menu_action)
         .setup(|app| {
-            let show = MenuItem::with_id(app, "show", "Open Openear", true, None::<&str>)?;
-            let quit =
-                MenuItem::with_id(app, "quit", "Quit and restore audio", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
-            let mut tray = TrayIconBuilder::new()
-                .menu(&menu)
-                .tooltip("Openear")
-                .on_menu_event(menu_action);
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
-            }
-            tray.build(app)?;
+            app.manage(TrayAvailable(tray::spawn(app.handle()).is_ok()));
             let weak = Arc::downgrade(&app.state::<Native>().0);
             std::thread::spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -92,15 +73,9 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let active = window
-                    .state::<Native>()
-                    .0
-                    .lock()
-                    .map(|audio| audio.is_active())
-                    .unwrap_or(false);
-                if active {
+                if window.state::<TrayAvailable>().0 {
                     api.prevent_close();
-                    let _ = window.hide();
+                    let _ = window.minimize();
                 }
             }
         });

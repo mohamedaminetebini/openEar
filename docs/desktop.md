@@ -12,7 +12,7 @@ The receiver's playback volume/mute, mic gain/mute, and mic automatic gain contr
 
 System EQ processes playback routed through Openear's PipeWire output. Existing playback streams are moved to it and it becomes the default for new streams. Apps pinned to a physical output, direct ALSA/JACK clients, passthrough audio, and microphone capture can bypass it. Select **Openear System EQ** in those apps where possible.
 
-While EQ is active, closing the window keeps audio running in the background. Reopen it from the tray or launch Openear again. Use **Quit and restore audio** in the tray menu to exit and restore routing. When EQ is inactive, closing the window exits. Tray availability depends on the desktop environment; relaunching always brings the single existing instance forward. Unplugging the selected output or losing the filter stops processing through a background monitor.
+The close button minimizes the window; audio and EQ keep running in the background. Reopen it from the tray or launch Openear again. Use **Quit and restore audio** in the tray menu to exit and restore routing. Tray availability depends on the desktop environment; relaunching always brings the single existing instance forward. Unplugging the selected output or losing the filter stops processing through a background monitor.
 
 Profiles and preferences persist locally in the desktop webview's IndexedDB. This storage is separate from the browser site's storage; existing browser profiles are not automatically migrated. There is no cloud backup.
 

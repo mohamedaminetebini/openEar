@@ -6,6 +6,17 @@ test('desktop-only launch guard offers no browser hardware or token controls', a
   await expect(page.getByRole('heading', { name: 'Openear is a desktop app' })).toBeVisible();
   await expect(page.getByRole('combobox')).toHaveCount(0);
 });
+test('paired headsets that are not connected can be connected from the output panel', async ({
+  page,
+}) => {
+  await installDesktop(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Connect headset' }).click();
+  await expect(page.getByRole('dialog', { name: 'Connect a headset' })).toBeVisible();
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Connect headset' })).toHaveCount(0);
+});
 test('recognized receiver uses the bundled official logo and switches themes with the selected output', async ({
   page,
 }) => {
@@ -34,7 +45,7 @@ test('recognized receiver uses the bundled official logo and switches themes wit
   await expect(page.locator('html')).toHaveAttribute('data-manufacturer', 'neutral');
   await expect(page.getByLabel('Listen through')).toHaveValue('speaker');
 });
-test('enables desktop EQ, applies live presets, saves and reapplies a profile', async ({
+test('starts desktop EQ on a detected headphone, applies live presets, saves and reapplies a profile', async ({
   page,
 }) => {
   await installDesktop(page);
@@ -43,9 +54,8 @@ test('enables desktop EQ, applies live presets, saves and reapplies a profile', 
   page.on('request', (request) => {
     if (request.url().includes(':4318/')) ++networkRequests;
   });
-  await page.getByRole('button', { name: 'Enable desktop EQ', exact: true }).click();
   await expect(page.getByText('Desktop EQ active', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Listen through')).toBeDisabled();
+  await expect(page.getByLabel('Listen through')).toBeEnabled();
   await page.getByRole('combobox', { name: 'Sound preset' }).click();
   await page.getByRole('option', { name: 'Treble soften', exact: true }).click();
   await expect(page.getByRole('slider', { name: '8000 Hz gain', exact: true })).toHaveAttribute(
@@ -70,29 +80,25 @@ test('enables desktop EQ, applies live presets, saves and reapplies a profile', 
     'aria-valuenow',
     '-3',
   );
-  await page.getByRole('button', { name: 'Enable desktop EQ', exact: true }).click();
   await page.getByRole('button', { name: 'Turn off desktop EQ', exact: true }).click();
   await expect(page.getByText('Desktop EQ off', { exact: true })).toBeVisible();
   expect(networkRequests).toBe(0);
 });
-test('receiver commands report failure and retain the pending edit for retry', async ({ page }) => {
+test('receiver commands report failure and keep the slider for retry', async ({ page }) => {
   await installDesktop(page);
   await page.goto('/');
   await page.getByRole('button', { name: 'Device', exact: true }).click();
   const slider = page.getByRole('slider', { name: 'Receiver playback volume' });
-  await slider.press('End');
   await page.evaluate(() =>
     window.dispatchEvent(new CustomEvent('fixture-failure', { detail: 'Receiver unavailable' })),
   );
-  await page.getByRole('button', { name: 'Apply', exact: true }).first().click();
+  await slider.press('End');
   await expect(page.getByRole('alert')).toContainText('Audio is unavailable');
-  await expect(page.getByRole('button', { name: 'Apply', exact: true }).first()).toBeEnabled();
   await page.evaluate(() =>
     window.dispatchEvent(new CustomEvent('fixture-failure', { detail: null })),
   );
-  await page.getByRole('button', { name: 'Apply', exact: true }).first().click();
-  await expect(slider).toHaveValue('100');
-  await expect(page.getByRole('button', { name: 'Apply', exact: true }).first()).toBeDisabled();
+  await slider.press('End');
+  await expect(slider).toHaveAttribute('aria-valuenow', '100');
 });
 test('profiles can be renamed, updated, duplicated, preferred and deleted', async ({ page }) => {
   await installDesktop(page, false);

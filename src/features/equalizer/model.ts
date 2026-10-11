@@ -34,7 +34,6 @@ export const presetNotes: Record<string, string> = {
   'Movie night': 'Light bass and dialogue lift for films.',
 };
 export function getHeadroom(settings: EqSettings): number {
-  // Reserve the sum of positive gains, a conservative bound for overlapping filters.
   const boost = settings.enabled
     ? settings.bands.reduce((total, gain) => total + Math.max(0, gain), 0)
     : 0;

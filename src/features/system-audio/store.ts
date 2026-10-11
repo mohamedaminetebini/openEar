@@ -38,10 +38,13 @@ async function request(input?: NativeCommand) {
   if (!state.success) throw new Error('The audio response is incompatible. Restart Openear.');
   return state.data;
 }
+let lastSnapshot = '';
 function update(state: NativeState) {
+  const serialized = JSON.stringify(state);
+  if (serialized === lastSnapshot) return;
+  lastSnapshot = serialized;
   const previous = useNativeAudio.getState().state;
   const selected = useNativeAudio.getState().selectedOutput;
-  // After the first load, follow the system default when it changes, such as when a new headset connects.
   const defaultChanged =
     previous !== null &&
     state.defaultOutput !== previous.defaultOutput &&
@@ -60,6 +63,14 @@ export function selectOutput(id: string) {
   if (state.busy || state.state?.active || !state.state?.outputs.some((output) => output.id === id))
     return;
   useNativeAudio.setState({ selectedOutput: id });
+}
+export async function runOperation(input: NativeCommand): Promise<boolean> {
+  try {
+    await nativeOperation(input);
+    return true;
+  } catch {
+    return false;
+  }
 }
 export function initializeDesktopAudio(): Promise<void> {
   if (connection) return connection;
@@ -104,6 +115,7 @@ export function initializeDesktopAudio(): Promise<void> {
 }
 export function disposeDesktopAudio() {
   ++generation;
+  lastSnapshot = '';
   if (polling) clearInterval(polling);
   polling = null;
   useNativeAudio.setState({
@@ -121,7 +133,8 @@ export function nativeOperation(input: NativeCommand): Promise<NativeState> {
     .then(async () => {
       if (current !== generation)
         throw new Error('The audio session changed. Retry the operation.');
-      useNativeAudio.setState({ busy: true, error: null });
+      const quiet = input.operation === 'outputVolume';
+      if (!quiet) useNativeAudio.setState({ busy: true, error: null });
       try {
         const state = await request(input);
         if (current === generation) update(state);
@@ -133,7 +146,7 @@ export function nativeOperation(input: NativeCommand): Promise<NativeState> {
           });
         throw error;
       } finally {
-        if (current === generation) useNativeAudio.setState({ busy: false });
+        if (current === generation && !quiet) useNativeAudio.setState({ busy: false });
       }
     })
     .finally(() => {

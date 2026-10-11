@@ -1,0 +1,96 @@
+.settings-explanation {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-explanation:last-child {
+  border-bottom: 0;
+}
+.settings-explanation > svg {
+  color: var(--text-soft);
+  width: 18px;
+  height: 18px;
+}
+.settings-explanation h3 {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 0 0 6px;
+}
+.settings-explanation p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-soft);
+}
+.protocol-details {
+  margin: 16px 20px;
+}
+.protocol-details summary {
+  font-size: 13px;
+  color: var(--text-soft);
+  cursor: pointer;
+}
+.protocol-details pre {
+  background: var(--sunk);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.desktop-required,
+.fatal-error {
+  margin: 80px auto;
+  padding: 32px;
+  max-width: 600px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+}
+
+.skip-link {
+  position: fixed;
+  top: -70px;
+  left: 10px;
+  z-index: 100;
+  padding: 10px 16px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-radius: var(--radius-md);
+}
+.skip-link:focus {
+  top: 10px;
+}
+#main-content {
+  scroll-margin-top: 16px;
+}
+[data-slot='dialog-content'],
+[data-slot='select-content'] {
+  overscroll-behavior: contain;
+}
+
+button > svg,
+.section-bar h2 > svg,
+.level-title > svg,
+.app-identity > svg,
+.device-details dt > svg {
+  transform: translateY(-0.04em);
+}
+button,
+.section-bar h2,
+.level-title,
+.processing-status,
+.device-details dt,
+.app-identity,
+.eq-toggle,
+.preset-toolbar > label,
+.output-field > label {
+  line-height: 1;
+}

@@ -1,0 +1,98 @@
+.profile-list {
+  padding: 0 20px;
+}
+.profile-row {
+  padding: 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.profile-row:last-child {
+  border-bottom: 0;
+}
+.profile-identity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.profile-identity > svg {
+  color: var(--text-secondary);
+  width: 18px;
+  height: 18px;
+}
+.profile-identity h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.profile-identity p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.profile-actions {
+  display: flex;
+  gap: 2px;
+}
+.preferred-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--accent-ink);
+}
+.profiles-empty {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 20px;
+  color: var(--text-soft);
+}
+.profiles-empty > svg {
+  width: 24px;
+  height: 24px;
+}
+.profiles-empty h3 {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--foreground);
+  margin: 0 0 6px;
+}
+.profiles-empty p {
+  margin: 0;
+  font-size: 13px;
+}
+.profiles-panel > .fine-print {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  margin: 0;
+}
+.operation-notice {
+  color: var(--foreground);
+  padding: 12px 20px 0;
+  font-size: 13px;
+}
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.profile-form > label {
+  font-size: 13px;
+}
+.profile-form .fine-print {
+  margin: 0;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}

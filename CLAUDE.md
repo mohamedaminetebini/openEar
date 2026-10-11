@@ -54,3 +54,5 @@ Unit tests use Vitest + Testing Library with `src/tests/setup.ts`. Playwright te
 ## Conventions
 
 Keep native operations in the Rust core; do not add shell strings, new Tauri permissions, or remote origins. Add a manufacturer integration or theme only with exact verified identifiers and bundled assets with their license (`public/brands/ATTRIBUTION.md`). The product name is Openear everywhere; the Dexie database name `headroom` is the one intentional exception, because renaming it would orphan existing user profiles.
+
+UI copy stays minimal. Do not add explanatory fine-print, tips, or "how it works" sentences to the app; the user rejects this as AI-sounding filler. Put behavior notes in `README.md`, `docs/`, or this file instead. Keep only labels, short status words, and error messages the user must act on.

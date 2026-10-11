@@ -88,7 +88,7 @@ function EqualizerPanel({ standalone = false }: { standalone?: boolean }) {
       </div>
       <p className="fine-print" aria-live="polite">
         {presetNotes[active] ?? 'Adjust a preset to taste and save your own.'} Presets are starting
-        points, not measured H858 corrections.
+        points, not measured corrections for any specific headset.
       </p>
       <div className={`eq-console ${eq.enabled ? '' : 'bypassed'}`}>
         <div className="gain-scale" aria-hidden="true">

@@ -3,12 +3,13 @@ import type { NativeState, NativeCommand } from '../src/features/system-audio/sc
 export async function installDesktop(page: Page, receiver = true) {
   const state: NativeState = {
     outputs: [
-      { id: 'receiver', name: 'USB audio', receiver: true, transport: 'usb' },
+      { id: 'receiver', name: 'USB audio', receiver: true, transport: 'usb', volume: 80 },
       { id: 'speaker', name: 'Desktop speakers', receiver: false, transport: 'other' },
     ],
     active: false,
     target: null,
     defaultOutput: null,
+    pairedDevices: [{ address: '77:35:D9:7D:14:7B', name: 'Test headset' }],
     eq: { enabled: true, bands: Array<number>(10).fill(0) },
     receiver: receiver
       ? { volume: 60, mute: false, micGain: 20, micMute: false, autoGain: true }
@@ -67,6 +68,11 @@ export async function installDesktop(page: Page, receiver = true) {
               break;
             case 'micMute':
               if (snapshot.receiver) snapshot.receiver.micMute = input.value;
+              break;
+            case 'connect':
+              snapshot.pairedDevices = snapshot.pairedDevices.filter(
+                (device) => device.address !== input.address,
+              );
               break;
             case 'autoGain':
               if (snapshot.receiver) snapshot.receiver.autoGain = input.value;

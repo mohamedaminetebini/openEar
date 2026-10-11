@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { database } from '@/lib/db/database';
 import { eqSchema, flatEq, type EqSettings } from '@/features/equalizer/model';
 import { AudioEngine } from '@/features/audio/engine';
-import { applySystemEq, useNativeAudio } from '@/features/system-audio/store';
+import { applySystemEq, runOperation, useNativeAudio } from '@/features/system-audio/store';
 
 export const audioEngine = new AudioEngine();
 const preferencesSchema = z.object({
@@ -71,6 +71,19 @@ export const useApp = create<AppState>((set, get) => ({
     persist();
   },
 }));
+let presentHeadphones = new Set<string>();
+const removeHeadphoneSubscription = useNativeAudio.subscribe((state) => {
+  const snapshot = state.state;
+  if (!snapshot) return;
+  const headphones = snapshot.outputs.filter(
+    (output) => output.transport === 'usb' || output.transport === 'bluetooth',
+  );
+  const current = new Set(headphones.map((output) => output.id));
+  const fresh = headphones.find((output) => !presentHeadphones.has(output.id));
+  presentHeadphones = current;
+  if (fresh && !snapshot.active)
+    void runOperation({ operation: 'start', target: fresh.id, eq: useApp.getState().eq });
+});
 const removeNativeSubscription = useNativeAudio.subscribe((state, previous) => {
   if (state.state?.active && !previous.state?.active) useApp.getState().setEq(state.state.eq);
   const eq = useApp.getState().eq;
@@ -113,5 +126,6 @@ if (import.meta.hot)
     clearTimeout(timer);
     clearTimeout(nativeTimer);
     removeNativeSubscription();
+    removeHeadphoneSubscription();
     void audioEngine.dispose();
   });
