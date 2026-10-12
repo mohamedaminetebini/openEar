@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, useState } from 'react';
-import { RotateCcw, Save, SlidersHorizontal } from 'lucide-react';
+import { lazy, memo, Suspense, useCallback, useMemo, useState } from 'react';
+import { Headphones, RotateCcw, Save, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SectionBar } from '@/components/section-bar';
 import { Slider } from '@/components/ui/slider';
@@ -11,24 +11,44 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useApp } from '@/stores/app-store';
+import { outputById, useApp } from '@/stores/app-store';
+import { deviceKey } from '@/features/devices/device-sound';
 import { frequencies, flatEq, getHeadroom, presets, presetNotes } from './model';
 import { ProfileDialog } from '@/features/profiles/profile-dialog';
 import { useNativeAudio } from '@/features/system-audio/store';
 
+const CorrectionsDialog = lazy(() =>
+  import('@/features/corrections/corrections-dialog').then((module) => ({
+    default: module.CorrectionsDialog,
+  })),
+);
+
 function EqualizerPanel({ standalone = false }: { standalone?: boolean }) {
   const systemActive = useNativeAudio((state) => state.state?.active === true);
+  const selectedOutput = useNativeAudio((state) => state.selectedOutput);
   const eq = useApp((state) => state.eq);
   const setEq = useApp((state) => state.setEq);
   const setBand = useApp((state) => state.setBand);
+  const correction = useApp((state) => {
+    const output = outputById(selectedOutput);
+    return output ? state.deviceSounds[deviceKey(output)]?.correction : undefined;
+  });
   const [saveOpen, setSaveOpen] = useState(false);
-  const active = useMemo(
-    () =>
-      Object.entries(presets).find(([, bands]) =>
-        bands.every((value, index) => value === eq.bands[index]),
-      )?.[0] ?? 'Custom',
-    [eq.bands],
-  );
+  const [findOpen, setFindOpen] = useState(false);
+  const correctionMatches =
+    correction !== null &&
+    correction !== undefined &&
+    eq.shape === 'peaking' &&
+    correction.bands.every((gain, index) => Math.abs(gain - (eq.bands[index] ?? 0)) <= 0.05);
+  const active = useMemo(() => {
+    if (correctionMatches) return correction.name;
+    return (
+      Object.entries(presets).find(
+        ([, bands]) =>
+          eq.shape !== 'peaking' && bands.every((value, index) => value === eq.bands[index]),
+      )?.[0] ?? 'Custom'
+    );
+  }, [correction, correctionMatches, eq.bands, eq.shape]);
   const audioAvailable = typeof AudioContext !== 'undefined' || systemActive;
   const headroom = useMemo(() => -20 * Math.log10(getHeadroom(eq)), [eq]);
   const changeBand = useCallback(
@@ -62,16 +82,16 @@ function EqualizerPanel({ standalone = false }: { standalone?: boolean }) {
           value={active}
           onValueChange={(value) => {
             const bands = presets[value];
-            if (bands) setEq({ ...eq, bands: [...bands] });
+            if (bands) setEq({ ...eq, bands: [...bands], shape: undefined });
           }}
         >
-          <SelectTrigger id="preset" className="w-40">
+          <SelectTrigger id="preset" className="w-80 max-w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {active === 'Custom' && (
-              <SelectItem value="Custom" disabled>
-                Custom
+            {!presets[active] && (
+              <SelectItem value={active} disabled>
+                {active}
               </SelectItem>
             )}
             {Object.keys(presets).map((name) => (
@@ -81,14 +101,26 @@ function EqualizerPanel({ standalone = false }: { standalone?: boolean }) {
             ))}
           </SelectContent>
         </Select>
-        <Button variant="ghost" size="sm" onClick={() => setEq({ ...flatEq, enabled: eq.enabled })}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setEq({ ...flatEq, enabled: eq.enabled, shape: undefined })}
+        >
           <RotateCcw />
           Reset
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="find-button"
+          onClick={() => setFindOpen(true)}
+        >
+          <Headphones />
+          Find headphones
+        </Button>
       </div>
       <p className="fine-print" aria-live="polite">
-        {presetNotes[active] ?? 'Adjust a preset to taste and save your own.'} Presets are starting
-        points, not measured corrections for any specific headset.
+        {presetNotes[active] ?? 'Adjust a preset to taste and save your own.'}
       </p>
       <div className={`eq-console ${eq.enabled ? '' : 'bypassed'}`}>
         <div className="gain-scale" aria-hidden="true">
@@ -122,6 +154,11 @@ function EqualizerPanel({ standalone = false }: { standalone?: boolean }) {
         </Button>
       </div>
       <ProfileDialog open={saveOpen} onOpenChange={setSaveOpen} />
+      {findOpen && (
+        <Suspense fallback={null}>
+          <CorrectionsDialog open={findOpen} onOpenChange={setFindOpen} />
+        </Suspense>
+      )}
     </section>
   );
 }

@@ -1,12 +1,39 @@
 use crate::audio::{command, command_within, Result};
+use crate::soundcore;
 use serde::Serialize;
 use std::{collections::HashSet, time::Duration};
 
-pub(crate) fn brand_for_modalias(modalias: &str) -> Option<&'static str> {
-    match modalias {
-        "bluetooth:v05D6p000Ad0240" => Some("redragon"),
-        _ => None,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum NoiseKind {
+    Aap,
+    Soundcore,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Identity {
+    pub(crate) noise: Option<NoiseKind>,
+    pub(crate) brand: Option<&'static str>,
+}
+pub(crate) fn identity(info: &str) -> Identity {
+    let lines = || info.lines().map(str::trim);
+    let soundcore = lines().any(|line| {
+        line.starts_with("UUID:") && line.ends_with(&format!("({})", soundcore::SERVICE))
+    });
+    let noise = if lines().any(|line| line == "Modalias: bluetooth:v004Cp200Ed4C0F") {
+        Some(NoiseKind::Aap)
+    } else if soundcore {
+        Some(NoiseKind::Soundcore)
+    } else {
+        None
+    };
+    Identity {
+        noise,
+        brand: soundcore.then_some("soundcore"),
     }
+}
+pub(crate) fn bluetooth_identity(address: &str) -> Identity {
+    command("bluetoothctl", &["info", address])
+        .map(|text| identity(&text))
+        .unwrap_or_default()
 }
 pub(crate) fn valid_address(address: &str) -> bool {
     address.len() == 17
@@ -36,16 +63,6 @@ pub(crate) fn bluetooth_battery(address: &str) -> Option<u8> {
     command("bluetoothctl", &["info", address])
         .ok()
         .and_then(|text| parse_battery(&text))
-}
-pub(crate) fn bluetooth_modalias(address: &str) -> Option<String> {
-    command("bluetoothctl", &["info", address])
-        .ok()?
-        .lines()
-        .map(str::trim)
-        .find_map(|line| {
-            line.strip_prefix("Modalias:")
-                .map(|value| value.trim().to_string())
-        })
 }
 pub(crate) fn parse_bluetooth_devices(text: &str) -> Vec<(String, String)> {
     text.lines()
@@ -94,6 +111,7 @@ pub(crate) fn connect_headset(address: &str) -> Result<()> {
     if !is_paired(address) {
         return Err("Select a paired headset first.".into());
     }
+    command("bluetoothctl", &["trust", address])?;
     let output = command_within(
         "bluetoothctl",
         &["connect", address],

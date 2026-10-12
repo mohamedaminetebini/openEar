@@ -6,7 +6,7 @@ import {
   type NativeCommand,
   type NativeState,
 } from './schema';
-import type { EqSettings } from '../equalizer/model';
+import { sameEq, type EqSettings } from '../equalizer/model';
 
 let generation = 0;
 let queue: Promise<unknown> = Promise.resolve();
@@ -45,8 +45,10 @@ function update(state: NativeState) {
   lastSnapshot = serialized;
   const previous = useNativeAudio.getState().state;
   const selected = useNativeAudio.getState().selectedOutput;
+  const eqTurnedOff = previous?.active === true && !state.active;
   const defaultChanged =
     previous !== null &&
+    !eqTurnedOff &&
     state.defaultOutput !== previous.defaultOutput &&
     state.outputs.some((output) => output.id === state.defaultOutput);
   const selectedOutput = state.active
@@ -157,7 +159,7 @@ export function nativeOperation(input: NativeCommand): Promise<NativeState> {
 }
 export async function applySystemEq(eq: EqSettings) {
   const state = useNativeAudio.getState().state;
-  if (state?.active && (operationsPending > 0 || JSON.stringify(state.eq) !== JSON.stringify(eq)))
+  if (state?.active && (operationsPending > 0 || !sameEq(state.eq, eq)))
     await nativeOperation({ operation: 'eq', eq });
 }
 if (import.meta.hot) import.meta.hot.dispose(disposeDesktopAudio);

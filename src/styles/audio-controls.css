@@ -8,8 +8,38 @@
   padding-top: 12px;
   border-top: 1px solid var(--border);
 }
-.noise-modes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.segmented {
+  display: inline-flex;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+}
+.segment {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.segment + .segment {
+  border-left: 1px solid var(--border-strong);
+}
+.segment[aria-pressed='true'] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.segment:hover:not(:disabled):not([aria-pressed='true']) {
+  color: var(--foreground);
+}
+.segment:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.segment:focus-visible {
+  outline: 2px solid var(--accent-ink);
+  outline-offset: -2px;
 }

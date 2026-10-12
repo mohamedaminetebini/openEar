@@ -19,9 +19,8 @@
   text-transform: uppercase;
   color: var(--text-secondary);
 }
-.preset-toolbar > button:last-child {
+.preset-toolbar > .find-button {
   margin-left: auto;
-  margin-right: -8px;
 }
 .equalizer-panel > .fine-print {
   padding: 0 20px;

@@ -39,3 +39,27 @@ it('does not re-render the output panel when an EQ band changes', () => {
   act(() => useApp.getState().setBand(0, 3));
   expect(onRender).not.toHaveBeenCalled();
 });
+
+it('shows noise control only for headsets that support it', () => {
+  const headset = {
+    id: 'headset',
+    name: 'Headset',
+    receiver: false,
+    transport: 'bluetooth' as const,
+    address: 'B0:F0:0C:49:20:45',
+  };
+  useNativeAudio.setState({
+    paired: true,
+    state: { ...state, outputs: [headset] },
+    selectedOutput: 'headset',
+    error: null,
+    busy: true,
+  });
+  const { queryByRole, unmount } = render(<SystemAudioPanel />);
+  expect(queryByRole('group', { name: 'Noise control' })).toBeNull();
+  unmount();
+  useNativeAudio.setState({ state: { ...state, outputs: [{ ...headset, noiseControl: true }] } });
+  expect(
+    render(<SystemAudioPanel />).queryByRole('group', { name: 'Noise control' }),
+  ).not.toBeNull();
+});
