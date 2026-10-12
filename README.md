@@ -10,7 +10,8 @@ Built with Tauri 2, Rust, React 19, and strict TypeScript.
 - **Desktop EQ:** ten bands, bypass, and presets, applied to system playback through PipeWire. Turning EQ off restores your previous output.
 - **Sound profiles:** save, rename, duplicate, prefer, and apply EQ settings. Profiles are stored locally.
 - **New devices:** when a USB or Bluetooth headset connects while EQ is off, Openear makes it the default output.
-- **Brand themes:** headphones are themed only when their hardware IDs match a known device. Everything else uses a neutral theme. Redragon H858 is the first brand supported.
+- **Noise control:** switch between off, noise cancellation, and transparency on supported Bluetooth headsets: Soundcore Q20i / Q21i NC, and B4 Pro.
+- **Brand themes:** headphones are themed only when their hardware IDs match a known device. Everything else uses a neutral theme. Redragon H858 is the first brand supported, through its USB receiver.
 - **Light and dark mode**, keyboard navigation, and a tray icon.
 
 ## Install
@@ -25,7 +26,7 @@ Build the packages yourself with `pnpm build`. Installers are written to `src-ta
 2. Turn on **Desktop EQ**. Adjust bands or pick a preset.
 3. Save the result as a profile in **Profiles**.
 
-Profiles only change sound while Desktop EQ is on. The close button minimizes Openear, and EQ keeps running in the background. Use **Quit and restore audio** in the tray menu to exit and restore your output.
+Profiles only change sound while Desktop EQ is on. The close button hides Openear to the tray, and EQ keeps running in the background. Open it again from the tray icon. Use **Quit and restore audio** in the tray menu to exit and restore your output.
 
 ## Limits
 

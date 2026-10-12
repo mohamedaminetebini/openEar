@@ -92,3 +92,39 @@ it('sends output volume without toggling the panel-wide busy state', async () =>
   expect(busyValues.includes(true)).toBe(false);
   expect(useNativeAudio.getState().state?.outputs[0]?.volume).toBe(55);
 });
+it('keeps the selected headset when desktop EQ turns off', async () => {
+  vi.stubGlobal('isTauri', true);
+  const eq = { enabled: true, bands: Array<number>(10).fill(0) };
+  const outputs = [
+    { id: 'headset', name: 'Headset', receiver: false, transport: 'bluetooth' as const },
+    { id: 'speaker', name: 'Speakers', receiver: false, transport: 'other' as const },
+  ];
+  const base = {
+    outputs,
+    active: false,
+    target: null,
+    defaultOutput: 'speaker',
+    eq,
+    receiver: null,
+    pairedDevices: [],
+    usbDevice: null,
+    error: null,
+  };
+  let current: object = base;
+  mockIPC((command, args) => {
+    if (command === 'audio_command' && args && 'input' in args) {
+      const input = nativeCommandSchema.parse(args.input);
+      if (input.operation === 'start')
+        current = { ...base, active: true, target: 'headset', defaultOutput: 'openear.system-eq' };
+      if (input.operation === 'stop')
+        current = { ...base, active: false, target: null, defaultOutput: 'speaker' };
+    }
+    return current;
+  });
+  await initializeDesktopAudio();
+  useNativeAudio.setState({ selectedOutput: 'headset' });
+  await nativeOperation({ operation: 'start', target: 'headset', eq });
+  expect(useNativeAudio.getState().selectedOutput).toBe('headset');
+  await nativeOperation({ operation: 'stop' });
+  expect(useNativeAudio.getState().selectedOutput).toBe('headset');
+});

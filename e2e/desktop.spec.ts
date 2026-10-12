@@ -136,3 +136,53 @@ test('minimum window keeps controls visible and keyboard EQ usable', async ({ pa
   );
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+test('remembers the EQ for each output', async ({ page }) => {
+  await installDesktop(page);
+  await page.goto('/');
+  await expect(page.getByText('Desktop EQ active', { exact: true })).toBeVisible();
+  await page.getByRole('combobox', { name: 'Sound preset' }).click();
+  await page.getByRole('option', { name: 'Bass boost', exact: true }).click();
+  await expect(page.getByRole('slider', { name: '31 Hz gain' })).toHaveAttribute(
+    'aria-valuenow',
+    '6',
+  );
+  await page.getByLabel('Listen through').selectOption('speaker');
+  await expect(page.getByLabel('Listen through')).toHaveValue('speaker');
+  await page.getByRole('combobox', { name: 'Sound preset' }).click();
+  await page.getByRole('option', { name: 'Vocal', exact: true }).click();
+  await expect(page.getByRole('slider', { name: '31 Hz gain' })).toHaveAttribute(
+    'aria-valuenow',
+    '-2',
+  );
+  await page.getByLabel('Listen through').selectOption('receiver');
+  await expect(page.getByRole('slider', { name: '31 Hz gain' })).toHaveAttribute(
+    'aria-valuenow',
+    '6',
+  );
+  await page.getByLabel('Listen through').selectOption('speaker');
+  await expect(page.getByRole('slider', { name: '31 Hz gain' })).toHaveAttribute(
+    'aria-valuenow',
+    '-2',
+  );
+});
+test('applies a headphone correction', async ({ page }) => {
+  await installDesktop(page);
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Find headphones' }).click();
+  await page.getByRole('searchbox', { name: 'Search models' }).fill('test mod');
+  await expect(page.getByRole('listitem')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Apply' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByRole('slider', { name: '31 Hz gain' })).toHaveAttribute(
+    'aria-valuenow',
+    '6.6',
+  );
+  await expect(page.getByRole('combobox', { name: 'Sound preset' })).toHaveText('Test Model One');
+  await page.getByRole('combobox', { name: 'Sound preset' }).click();
+  await page.getByRole('option', { name: 'Flat', exact: true }).click();
+  await expect(page.getByRole('slider', { name: '31 Hz gain' })).toHaveAttribute(
+    'aria-valuenow',
+    '0',
+  );
+  await expect(page.getByRole('combobox', { name: 'Sound preset' })).toHaveText('Flat');
+});

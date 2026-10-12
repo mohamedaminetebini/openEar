@@ -26,6 +26,22 @@ export async function installDesktop(page: Page, receiver = true) {
     error: null,
   };
   if (!receiver) state.outputs = state.outputs.filter((output) => !output.receiver);
+  await page.route('**/corrections/index.json', (route) =>
+    route.fulfill({
+      json: {
+        commit: 'test',
+        entries: [
+          [
+            'Test Model One',
+            'testsource',
+            'over-ear',
+            [6.6, 4.6, -0.4, -1.9, -0.1, -0.1, 3.9, -1.4, -2.7, -7.5],
+          ],
+          ['Another Model', 'testsource', 'in-ear', Array<number>(10).fill(0)],
+        ],
+      },
+    }),
+  );
   await page.addInitScript((snapshot) => {
     let failure: string | null = null;
     window.addEventListener('fixture-state', (event) => {

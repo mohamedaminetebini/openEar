@@ -59,7 +59,13 @@ export function App() {
           ) : (
             <Headphones aria-hidden="true" className="neutral-logo" />
           )}
-          <strong>{brand.model ? `${brand.name} ${brand.model}` : 'Your audio'}</strong>
+          <strong>
+            {brand.model
+              ? `${brand.name} ${brand.model}`
+              : brand.id === 'neutral'
+                ? 'Your audio'
+                : brand.name}
+          </strong>
           <span>
             {brand.model
               ? 'USB receiver detected'
@@ -76,7 +82,13 @@ export function App() {
       </aside>
       <div className="app-workspace">
         <header className="workspace-header">
-          <span>{brand.model ? `${brand.name} ${brand.model}` : 'Openear desktop'}</span>
+          <span>
+            {brand.model
+              ? `${brand.name} ${brand.model}`
+              : brand.id === 'neutral'
+                ? 'Openear desktop'
+                : brand.name}
+          </span>
           <div className="header-actions">
             <ThemeSwitch />
             <span className={`processing-status ${state?.active ? 'active' : ''}`} role="status">

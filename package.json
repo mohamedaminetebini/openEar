@@ -24,6 +24,7 @@
     "desktop:test": "cargo test --manifest-path src-tauri/Cargo.toml",
     "tauri": "tauri",
     "desktop:smoke": "node --experimental-strip-types scripts/desktop-smoke.ts",
+    "corrections:build": "node --experimental-strip-types scripts/build-corrections.ts",
     "dev:ui": "vite --host 127.0.0.1",
     "build:ui": "tsc -b && vite build"
   },

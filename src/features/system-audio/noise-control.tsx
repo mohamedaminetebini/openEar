@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { Button } from '@/components/ui/button';
 import { runOperation, useNativeAudio } from './store';
 
 const noiseModes = [
@@ -19,22 +18,22 @@ export function NoiseControl({ address }: { address: string }) {
     void runOperation({ operation: 'noise', address, mode: null });
   }, [address, busy, known]);
   return (
-    <div className="noise-control">
-      <span>Noise control</span>
-      <div className="noise-modes" role="group" aria-label="Noise control">
+    <div className="noise-control" role="group" aria-labelledby="noise-control-label">
+      <span id="noise-control-label">Noise control</span>
+      <div className="segmented">
         {noiseModes.map(([mode, label]) => {
           const active = known && noise?.mode === mode;
           return (
-            <Button
+            <button
               key={mode}
-              variant={active ? 'default' : 'outline'}
-              size="sm"
+              type="button"
+              className="segment"
               aria-pressed={active}
               disabled={busy}
               onClick={() => void runOperation({ operation: 'noise', address, mode })}
             >
               {label}
-            </Button>
+            </button>
           );
         })}
       </div>

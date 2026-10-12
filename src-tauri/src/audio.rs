@@ -1,9 +1,10 @@
 use crate::aap::{self, NoiseMode};
 use crate::bluetooth::{
-    bluetooth_battery, bluetooth_modalias, brand_for_modalias, connect_headset, is_paired,
-    paired_devices, valid_address, PairedDevice,
+    bluetooth_battery, bluetooth_identity, connect_headset, is_paired, paired_devices,
+    valid_address, Identity, NoiseKind, PairedDevice,
 };
-use crate::eq::{Eq, SINK};
+use crate::eq::{is_eq_node, Eq, SINK, SINK_ALT};
+use crate::soundcore;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
@@ -187,6 +188,8 @@ struct Output {
     receiver: bool,
     transport: &'static str,
     brand: Option<&'static str>,
+    #[serde(rename = "noiseControl")]
+    noise_control: bool,
     battery: Option<u8>,
     address: Option<String>,
     volume: Option<u8>,
@@ -256,19 +259,46 @@ pub struct Audio {
     previous_default: Option<String>,
     previous_streams: HashMap<u32, String>,
     node_id: Option<u64>,
+    filter_sink: Option<&'static str>,
     active: bool,
     target: Option<String>,
     eq: Eq,
     error: Option<String>,
     known_sinks: Option<HashSet<String>>,
-    modaliases: HashMap<String, Option<String>>,
+    identities: HashMap<String, Identity>,
     noise: Option<NoiseState>,
-    noise_session: Option<aap::Session>,
+    noise_session: Option<NoiseSession>,
+}
+enum NoiseSession {
+    Aap(aap::Session),
+    Soundcore(soundcore::Session),
+}
+impl NoiseSession {
+    fn open(kind: NoiseKind, address: &str) -> Result<Self> {
+        Ok(match kind {
+            NoiseKind::Aap => NoiseSession::Aap(aap::Session::open(address)?),
+            NoiseKind::Soundcore => NoiseSession::Soundcore(soundcore::Session::open(address)?),
+        })
+    }
+    fn address(&self) -> &str {
+        match self {
+            NoiseSession::Aap(session) => &session.address,
+            NoiseSession::Soundcore(session) => &session.address,
+        }
+    }
+    fn mode(&mut self, mode: Option<NoiseMode>) -> Result<NoiseMode> {
+        match (self, mode) {
+            (NoiseSession::Aap(session), Some(mode)) => session.set_mode(mode),
+            (NoiseSession::Aap(session), None) => session.read_mode(),
+            (NoiseSession::Soundcore(session), Some(mode)) => session.set_mode(mode),
+            (NoiseSession::Soundcore(session), None) => session.read_mode(),
+        }
+    }
 }
 fn new_device(known: &HashSet<String>, sinks: &[Sink]) -> Option<String> {
     sinks
         .iter()
-        .filter(|sink| !known.contains(&sink.name) && !sink.name.starts_with(SINK))
+        .filter(|sink| !known.contains(&sink.name) && !is_eq_node(&sink.name))
         .find(|sink| matches!(transport(sink), "usb" | "bluetooth"))
         .map(|sink| sink.name.clone())
 }
@@ -310,10 +340,7 @@ impl Audio {
         self.monitor()?;
         let mut outputs = Vec::new();
         let mut connected = HashSet::new();
-        for sink in sinks()?
-            .into_iter()
-            .filter(|sink| sink.name != SINK && !sink.name.starts_with(&format!("{SINK}.")))
-        {
+        for sink in sinks()?.into_iter().filter(|sink| !is_eq_node(&sink.name)) {
             let transport = transport(&sink);
             let volume = sink_volume(&sink);
             if let Some(address) = sink
@@ -333,18 +360,16 @@ impl Audio {
                     .get("device.product.id")
                     .and_then(Value::as_str)
                     .is_some_and(|id| id.contains("0881"));
-            let brand = match sink
+            let identity = match sink
                 .properties
                 .get("api.bluez5.address")
                 .and_then(Value::as_str)
             {
-                Some(address) if transport == "bluetooth" && valid_address(address) => self
-                    .modaliases
+                Some(address) if transport == "bluetooth" && valid_address(address) => *self
+                    .identities
                     .entry(address.to_string())
-                    .or_insert_with(|| bluetooth_modalias(address))
-                    .as_deref()
-                    .and_then(brand_for_modalias),
-                _ => None,
+                    .or_insert_with(|| bluetooth_identity(address)),
+                _ => Identity::default(),
             };
             let battery = match sink
                 .properties
@@ -361,7 +386,8 @@ impl Audio {
                 name: sink.description,
                 receiver,
                 transport,
-                brand,
+                brand: identity.brand,
+                noise_control: identity.noise.is_some(),
                 battery,
                 volume,
                 address: sink
@@ -398,7 +424,7 @@ impl Audio {
         }
         let default_output = command("pactl", &["get-default-sink"])
             .ok()
-            .filter(|name| !name.starts_with(SINK));
+            .filter(|name| !is_eq_node(name));
         Ok(Snapshot {
             outputs,
             active: self.active,
@@ -419,7 +445,7 @@ impl Audio {
         if value > 100 {
             return Err("Output volume must be between 0 and 100.".into());
         }
-        if output == SINK || !sinks()?.iter().any(|sink| sink.name == output) {
+        if is_eq_node(output) || !sinks()?.iter().any(|sink| sink.name == output) {
             return Err("Select an available audio output.".into());
         }
         command("pactl", &["set-sink-volume", output, &format!("{value}%")])?;
@@ -429,19 +455,27 @@ impl Audio {
         if !is_paired(address) {
             return Err("Select a paired headset first.".into());
         }
-        if self
-            .noise_session
-            .as_ref()
-            .map(|session| session.address.as_str())
-            != Some(address)
-        {
+        let kind = bluetooth_identity(address)
+            .noise
+            .ok_or(soundcore::UNSUPPORTED)?;
+        if self.noise_session.as_ref().map(NoiseSession::address) != Some(address) {
             self.noise_session = None;
-            self.noise_session = Some(aap::Session::open(address)?);
+            match NoiseSession::open(kind, address) {
+                Ok(session) => self.noise_session = Some(session),
+                Err(error) => {
+                    if error == soundcore::UNSUPPORTED {
+                        self.identities
+                            .entry(address.to_string())
+                            .or_insert_with(|| bluetooth_identity(address))
+                            .noise = None;
+                    }
+                    return Err(error);
+                }
+            }
         }
-        let result = match (self.noise_session.as_mut(), mode) {
-            (Some(session), Some(mode)) => session.set_mode(mode),
-            (Some(session), None) => session.read_mode(),
-            (None, _) => Err("The headset is not connected.".into()),
+        let result = match self.noise_session.as_mut() {
+            Some(session) => session.mode(mode),
+            None => Err("The headset is not connected.".into()),
         };
         match result {
             Ok(mode) => {
@@ -470,6 +504,11 @@ impl Audio {
             Command::Noise { address, mode } => self.set_noise(&address, mode)?,
             Command::Eq { eq } => {
                 eq.validate()?;
+                if eq.shape != self.eq.shape {
+                    self.switch_filter(eq)?;
+                    self.error = None;
+                    return self.snapshot();
+                }
                 let id = self
                     .node_id
                     .filter(|_| self.active)
@@ -510,11 +549,11 @@ impl Audio {
         if target.len() > 512
             || !sinks()?
                 .iter()
-                .any(|sink| sink.name == target && sink.name != SINK)
+                .any(|sink| sink.name == target && !is_eq_node(&sink.name))
         {
             return Err("Select an available audio output.".into());
         }
-        if !self.active && sinks()?.iter().any(|sink| sink.name == SINK) {
+        if !self.active && sinks()?.iter().any(|sink| is_eq_node(&sink.name)) {
             self.recover_orphaned_eq()?;
         }
         self.stop()?;
@@ -527,66 +566,22 @@ impl Audio {
             }
         }
         let result = (|| {
-            let directory = tempfile::Builder::new()
-                .prefix("openear-eq-")
-                .tempdir()
-                .map_err(|_| "Could not create private audio configuration.")?;
-            let path = directory.path().join("filter.conf");
-            fs::write(&path, eq.graph(target).to_string())
-                .map_err(|_| "Could not write audio configuration.")?;
+            let (child, directory, node_id) = spawn_filter(&eq, target, SINK)?;
+            self.child = Some(child);
             self.directory = Some(directory);
-            self.child = Some(
-                Process::new("pipewire")
-                    .arg("-c")
-                    .arg(path)
-                    .stdout(Stdio::null())
-                    .stderr(Stdio::null())
-                    .spawn()
-                    .map_err(|_| "PipeWire filter-chain is unavailable.")?,
-            );
-            let mut found = false;
-            for _ in 0..40 {
-                if sinks()?.iter().any(|sink| sink.name == SINK) {
-                    found = true;
-                    break;
-                }
-                thread::sleep(Duration::from_millis(100));
-            }
-            if !found {
-                return Err("PipeWire could not create the EQ output.".into());
-            }
-            let nodes: Value = serde_json::from_str(&command("pw-dump", &[])?)
-                .map_err(|_| "Invalid PipeWire response.")?;
-            self.node_id = nodes
-                .as_array()
-                .and_then(|nodes| {
-                    nodes.iter().find(|node| {
-                        node["type"] == "PipeWire:Interface:Node"
-                            && node["info"]["props"]["node.name"] == SINK
-                    })
-                })
-                .and_then(|node| node["id"].as_u64());
-            if self.node_id.is_none() {
-                return Err("EQ control node unavailable.".into());
-            }
+            self.node_id = Some(node_id);
+            self.filter_sink = Some(SINK);
             command("pactl", &["set-default-sink", SINK])?;
             for stream in streams()? {
-                if stream.properties.get("node.name").and_then(Value::as_str)
-                    == Some(&format!("{SINK}.output"))
+                if stream
+                    .properties
+                    .get("node.name")
+                    .and_then(Value::as_str)
+                    .is_some_and(is_eq_node)
                 {
                     continue;
                 }
-                if command(
-                    "pactl",
-                    &["move-sink-input", &stream.index.to_string(), SINK],
-                )
-                .is_err()
-                    && streams()?
-                        .iter()
-                        .any(|current| current.index == stream.index)
-                {
-                    return Err("A playback stream could not be routed through EQ.".into());
-                }
+                move_stream(stream.index, SINK)?;
             }
             self.target = Some(target.into());
             self.eq = eq;
@@ -598,11 +593,42 @@ impl Audio {
         }
         result
     }
+    fn switch_filter(&mut self, eq: Eq) -> Result<()> {
+        let target = self
+            .target
+            .clone()
+            .filter(|_| self.active)
+            .ok_or("Enable desktop EQ first.")?;
+        let current = self.filter_sink.unwrap_or(SINK);
+        let next = if current == SINK { SINK_ALT } else { SINK };
+        let (mut child, directory, node_id) = spawn_filter(&eq, &target, next)?;
+        let current_index = sink_index(current)?;
+        let switched = (|| -> Result<()> {
+            command("pactl", &["set-default-sink", next])?;
+            move_streams(current_index, next)
+        })();
+        if let Err(error) = switched {
+            let _ = command("pactl", &["set-default-sink", current]);
+            let _ = move_streams(sink_index(next).ok().flatten(), current);
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+        if let Some(mut old) = self.child.replace(child) {
+            let _ = old.kill();
+            let _ = old.wait();
+        }
+        self.directory = Some(directory);
+        self.node_id = Some(node_id);
+        self.filter_sink = Some(next);
+        self.eq = eq;
+        Ok(())
+    }
     fn recover_orphaned_eq(&mut self) -> Result<()> {
         let available = sinks()?;
         let fallback = available
             .iter()
-            .find(|sink| sink.name != SINK)
+            .find(|sink| !is_eq_node(&sink.name))
             .ok_or("No audio output is available.")?;
         reroute_from_eq(&available, fallback, &HashMap::new())?;
         for pid in orphaned_filter_pids() {
@@ -611,7 +637,7 @@ impl Audio {
             let _ = command("kill", &["-TERM", &pid]);
         }
         for _ in 0..40 {
-            if !sinks()?.iter().any(|sink| sink.name == SINK) {
+            if !sinks()?.iter().any(|sink| is_eq_node(&sink.name)) {
                 return Ok(());
             }
             thread::sleep(Duration::from_millis(100));
@@ -627,7 +653,7 @@ impl Audio {
             let fallback = available
                 .iter()
                 .find(|sink| Some(&sink.name) == self.previous_default.as_ref())
-                .or_else(|| available.iter().find(|sink| sink.name != SINK));
+                .or_else(|| available.iter().find(|sink| !is_eq_node(&sink.name)));
             if let Some(fallback) = fallback {
                 reroute_from_eq(&available, fallback, &self.previous_streams)?;
             }
@@ -636,6 +662,7 @@ impl Audio {
         self.active = false;
         self.target = None;
         self.node_id = None;
+        self.filter_sink = None;
         if let Some(mut child) = self.child.take() {
             let _ = child.kill();
             let _ = child.wait();
@@ -646,17 +673,89 @@ impl Audio {
         result
     }
 }
+fn spawn_filter(eq: &Eq, target: &str, sink: &str) -> Result<(Child, TempDir, u64)> {
+    let directory = tempfile::Builder::new()
+        .prefix("openear-eq-")
+        .tempdir()
+        .map_err(|_| "Could not create private audio configuration.")?;
+    let path = directory.path().join("filter.conf");
+    fs::write(&path, eq.graph(target, sink).to_string())
+        .map_err(|_| "Could not write audio configuration.")?;
+    let mut child = Process::new("pipewire")
+        .arg("-c")
+        .arg(path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|_| "PipeWire filter-chain is unavailable.")?;
+    match filter_node_id(sink) {
+        Ok(node_id) => Ok((child, directory, node_id)),
+        Err(error) => {
+            let _ = child.kill();
+            let _ = child.wait();
+            Err(error)
+        }
+    }
+}
+fn filter_node_id(sink: &str) -> Result<u64> {
+    let mut found = false;
+    for _ in 0..40 {
+        if sinks()?.iter().any(|candidate| candidate.name == sink) {
+            found = true;
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    if !found {
+        return Err("PipeWire could not create the EQ output.".into());
+    }
+    let nodes: Value = serde_json::from_str(&command("pw-dump", &[])?)
+        .map_err(|_| "Invalid PipeWire response.")?;
+    nodes
+        .as_array()
+        .and_then(|nodes| {
+            nodes.iter().find(|node| {
+                node["type"] == "PipeWire:Interface:Node"
+                    && node["info"]["props"]["node.name"] == sink
+            })
+        })
+        .and_then(|node| node["id"].as_u64())
+        .ok_or_else(|| "EQ control node unavailable.".into())
+}
+fn sink_index(name: &str) -> Result<Option<u32>> {
+    Ok(sinks()?
+        .iter()
+        .find(|sink| sink.name == name)
+        .map(|sink| sink.index))
+}
+fn move_stream(index: u32, to: &str) -> Result<()> {
+    if command("pactl", &["move-sink-input", &index.to_string(), to]).is_err()
+        && streams()?.iter().any(|current| current.index == index)
+    {
+        return Err("A playback stream could not be routed through EQ.".into());
+    }
+    Ok(())
+}
+fn move_streams(from: Option<u32>, to: &str) -> Result<()> {
+    let Some(from) = from else {
+        return Ok(());
+    };
+    for stream in streams()?.iter().filter(|stream| stream.sink == from) {
+        move_stream(stream.index, to)?;
+    }
+    Ok(())
+}
 fn reroute_from_eq(
     available: &[Sink],
     fallback: &Sink,
     previous: &HashMap<u32, String>,
 ) -> Result<()> {
-    if command("pactl", &["get-default-sink"])? == SINK {
+    if is_eq_node(&command("pactl", &["get-default-sink"])?) {
         command("pactl", &["set-default-sink", &fallback.name])?;
     }
     let eq_sink = available
         .iter()
-        .find(|sink| sink.name == SINK)
+        .find(|sink| is_eq_node(&sink.name))
         .map(|sink| sink.index);
     for stream in streams()? {
         if Some(stream.sink) != eq_sink {
@@ -714,7 +813,7 @@ impl Drop for Audio {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bluetooth::{parse_battery, parse_bluetooth_devices};
+    use crate::bluetooth::{identity, parse_battery, parse_bluetooth_devices};
     #[test]
     fn selects_only_newly_connected_usb_or_bluetooth_outputs() {
         let sink = |name: &str, bus: Option<&str>| Sink {
@@ -740,12 +839,19 @@ mod tests {
         assert_eq!(new_device(&known, &sinks[..2]), None);
     }
     #[test]
-    fn recognizes_bluetooth_brand_from_full_modalias_only() {
+    fn recognizes_noise_control_and_brand_from_verified_identifiers() {
         assert_eq!(
-            brand_for_modalias("bluetooth:v05D6p000Ad0240"),
-            Some("redragon")
+            identity("\tModalias: bluetooth:v004Cp200Ed4C0F\n").noise,
+            Some(NoiseKind::Aap)
         );
-        assert_eq!(brand_for_modalias("bluetooth:v05D6p0001d0240"), None);
+        let soundcore =
+            identity("\tUUID: Vendor specific           (0cf12d31-fac3-4553-bd80-d6832e7b300b)\n");
+        assert_eq!(soundcore.noise, Some(NoiseKind::Soundcore));
+        assert_eq!(soundcore.brand, Some("soundcore"));
+        assert_eq!(
+            identity("\tModalias: bluetooth:v05D6p000Ad0240\n"),
+            Identity::default()
+        );
         assert!(valid_address("77:35:D9:7D:14:7B"));
         assert!(!valid_address("77-35-D9-7D-14-7B"));
         assert!(!valid_address("77:35:D9:7D:14:7B; rm -rf /"));
@@ -847,8 +953,8 @@ mod tests {
             .apply(Command::Start {
                 target: "invalid".into(),
                 eq: Eq {
-                    enabled: true,
-                    bands: [f64::INFINITY; 10]
+                    bands: [f64::INFINITY; 10],
+                    ..Eq::default()
                 }
             })
             .is_err());

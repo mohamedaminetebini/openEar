@@ -78,21 +78,18 @@
   padding: 0 20px;
 }
 .level-control {
-  padding: 16px 0;
-  border-bottom: 1px solid var(--border);
-}
-.level-head {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 32px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  padding: 16px 0;
 }
 .level-title {
-  flex: 1;
-  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
+  height: 16px;
+  min-width: 0;
 }
 .level-title svg {
   width: 16px;
@@ -100,19 +97,23 @@
   flex: none;
   color: var(--text-soft);
 }
-.level-head output {
-  min-width: 48px;
-  text-align: right;
+.level-track {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.level-track [data-slot='slider'] {
+  height: 16px;
+}
+.level-track output {
+  align-self: flex-end;
+  line-height: 1;
   font-family: var(--font-mono);
   font-size: 13px;
   color: var(--foreground);
   font-variant-numeric: tabular-nums;
-}
-.level-control input[type='range'] {
-  display: block;
-  width: 100%;
-  margin-top: 10px;
-  accent-color: var(--lamp);
 }
 .setting-list {
   padding: 0 20px;

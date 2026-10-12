@@ -3,6 +3,8 @@ mod aap;
 mod audio;
 mod bluetooth;
 mod eq;
+mod socket;
+mod soundcore;
 mod tray;
 use audio::{Audio, Command, Snapshot};
 use std::sync::{Arc, Mutex};
@@ -75,7 +77,7 @@ fn main() {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.state::<TrayAvailable>().0 {
                     api.prevent_close();
-                    let _ = window.minimize();
+                    let _ = window.hide();
                 }
             }
         });

@@ -4,11 +4,14 @@ import { database } from '@/lib/db/database';
 import { eqSchema, flatEq, type EqSettings } from '@/features/equalizer/model';
 import { AudioEngine } from '@/features/audio/engine';
 import { applySystemEq, runOperation, useNativeAudio } from '@/features/system-audio/store';
+import { deviceKey, deviceSoundsSchema, type DeviceSound } from '@/features/devices/device-sound';
+import type { NativeState } from '@/features/system-audio/schema';
 
 export const audioEngine = new AudioEngine();
 const preferencesSchema = z.object({
   eq: eqSchema,
   lastProfile: z.string().nullable(),
+  deviceSounds: deviceSoundsSchema.default({}),
 });
 type Preferences = z.infer<typeof preferencesSchema>;
 interface AppState extends Preferences {
@@ -30,6 +33,7 @@ function persist() {
     const value: Preferences = {
       eq: state.eq,
       lastProfile: state.lastProfile,
+      deviceSounds: state.deviceSounds,
     };
     writes = writes
       .catch(() => {})
@@ -47,12 +51,27 @@ function persist() {
 export const useApp = create<AppState>((set, get) => ({
   eq: flatEq,
   lastProfile: null,
+  deviceSounds: {},
   hydrated: false,
   persistenceError: null,
   setEq: (input) => {
     const eq = eqSchema.parse(input);
     audioEngine.setEq(useNativeAudio.getState().state?.active ? { ...eq, enabled: false } : eq);
-    set({ eq, lastProfile: null });
+    const output = activeOutput();
+    if (output) {
+      const key = deviceKey(output);
+      const deviceSounds = get().deviceSounds;
+      set({
+        eq,
+        lastProfile: null,
+        deviceSounds: {
+          ...deviceSounds,
+          [key]: { correction: null, bass: 0, treble: 0, ...deviceSounds[key], eq },
+        },
+      });
+    } else {
+      set({ eq, lastProfile: null });
+    }
     clearTimeout(nativeTimer);
     nativeTimer = setTimeout(() => {
       void applySystemEq(useApp.getState().eq).catch(() => {});
@@ -71,9 +90,42 @@ export const useApp = create<AppState>((set, get) => ({
     persist();
   },
 }));
+export function outputById(id: string | null): NativeState['outputs'][number] | undefined {
+  return useNativeAudio.getState().state?.outputs.find((output) => output.id === id);
+}
+export function soundFor(output: NativeState['outputs'][number]): EqSettings {
+  const { deviceSounds, eq } = useApp.getState();
+  return deviceSounds[deviceKey(output)]?.eq ?? eq;
+}
+export function activeOutput() {
+  const state = useNativeAudio.getState().state;
+  return state?.active ? outputById(state.target) : undefined;
+}
+export async function applyCorrection(name: string, source: string, bands: number[]) {
+  const output = activeOutput() ?? outputById(useNativeAudio.getState().selectedOutput);
+  if (!output) return;
+  const key = deviceKey(output);
+  const existing: DeviceSound = useApp.getState().deviceSounds[key] ?? {
+    eq: flatEq,
+    correction: null,
+    bass: 0,
+    treble: 0,
+  };
+  const eq: EqSettings = { enabled: true, bands: [...bands], shape: 'peaking' };
+  useApp.setState((state) => ({
+    deviceSounds: {
+      ...state.deviceSounds,
+      [key]: { ...existing, correction: { name, source, bands }, eq },
+    },
+  }));
+  persist();
+  if (activeOutput()) useApp.getState().setEq(eq);
+  else await runOperation({ operation: 'start', target: output.id, eq });
+}
 let presentHeadphones = new Set<string>();
-const removeHeadphoneSubscription = useNativeAudio.subscribe((state) => {
-  const snapshot = state.state;
+function checkHeadphones() {
+  if (!useApp.getState().hydrated) return;
+  const snapshot = useNativeAudio.getState().state;
   if (!snapshot) return;
   const headphones = snapshot.outputs.filter(
     (output) => output.transport === 'usb' || output.transport === 'bluetooth',
@@ -82,12 +134,19 @@ const removeHeadphoneSubscription = useNativeAudio.subscribe((state) => {
   const fresh = headphones.find((output) => !presentHeadphones.has(output.id));
   presentHeadphones = current;
   if (fresh && !snapshot.active)
-    void runOperation({ operation: 'start', target: fresh.id, eq: useApp.getState().eq });
+    void runOperation({ operation: 'start', target: fresh.id, eq: soundFor(fresh) });
+}
+const removeHeadphoneSubscription = useNativeAudio.subscribe(checkHeadphones);
+const removeHydrationSubscription = useApp.subscribe((state, previous) => {
+  if (state.hydrated && !previous.hydrated) checkHeadphones();
 });
 const removeNativeSubscription = useNativeAudio.subscribe((state, previous) => {
-  if (state.state?.active && !previous.state?.active) useApp.getState().setEq(state.state.eq);
+  const native = state.state;
+  const switched =
+    native?.active === true && (!previous.state?.active || native.target !== previous.state.target);
+  if (native && switched) useApp.getState().setEq(native.eq);
   const eq = useApp.getState().eq;
-  audioEngine.setEq(state.state?.active ? { ...eq, enabled: false } : eq);
+  audioEngine.setEq(native?.active ? { ...eq, enabled: false } : eq);
 });
 export async function applySavedEq(eq: EqSettings) {
   clearTimeout(nativeTimer);
@@ -127,5 +186,6 @@ if (import.meta.hot)
     clearTimeout(nativeTimer);
     removeNativeSubscription();
     removeHeadphoneSubscription();
+    removeHydrationSubscription();
     void audioEngine.dispose();
   });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eqSchema, getHeadroom, presets } from './model';
+import { eqSchema, flatEq, getHeadroom, presets, sameEq, type EqSettings } from './model';
 
 describe('audio settings boundary', () => {
   it('accepts a ten-band setting and rejects wrong lengths and out-of-range gain', () => {
@@ -37,5 +37,27 @@ describe('audio settings boundary', () => {
     Object.values(presets).forEach((bands) =>
       expect(eqSchema.safeParse({ enabled: true, bands }).success).toBe(true),
     );
+  });
+});
+
+describe('peaking headroom and EQ identity', () => {
+  const bands = (values: Partial<Record<number, number>>) =>
+    Array.from({ length: 10 }, (_, index) => values[index] ?? 0);
+
+  it('computes peaking headroom from the combined response', () => {
+    const single: EqSettings = { enabled: true, bands: bands({ 5: 6 }), shape: 'peaking' };
+    expect(-20 * Math.log10(getHeadroom(single))).toBeCloseTo(6, 0);
+    expect(getHeadroom({ ...flatEq, shape: 'peaking' })).toBe(1);
+    const correction: EqSettings = {
+      enabled: true,
+      bands: [6.6, 4.6, -0.4, -1.9, -0.1, -0.1, 3.9, -1.4, -2.7, -7.5],
+      shape: 'peaking',
+    };
+    expect(-20 * Math.log10(getHeadroom(correction))).toBeCloseTo(7.46, 2);
+  });
+
+  it('treats a missing shape as graphic when comparing EQs', () => {
+    expect(sameEq(flatEq, { ...flatEq, shape: 'graphic' })).toBe(true);
+    expect(sameEq(flatEq, { ...flatEq, shape: 'peaking' })).toBe(false);
   });
 });

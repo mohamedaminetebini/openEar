@@ -35,15 +35,31 @@ it('returns a neutral theme after unplugging or before discovery', () => {
   expect(manufacturerForOutput(null, null).id).toBe('neutral');
   expect(manufacturerForOutput({ ...state, usbDevice: null }, 'receiver').id).toBe('neutral');
 });
-it('applies the brand reported by a verified Bluetooth identifier', () => {
+it('applies the Soundcore logo only to outputs with a verified Soundcore identity', () => {
+  const soundcore: NativeState = {
+    ...state,
+    usbDevice: null,
+    outputs: [
+      { id: 'sc', name: 'Q21i', receiver: false, transport: 'bluetooth', brand: 'soundcore' },
+      { id: 'other', name: 'Other headset', receiver: false, transport: 'bluetooth' },
+    ],
+  };
+  expect(manufacturerForOutput(soundcore, 'sc')).toMatchObject({
+    id: 'soundcore',
+    logo: '/brands/soundcore.svg',
+  });
+  expect(manufacturerForOutput(soundcore, 'other').id).toBe('neutral');
+});
+
+it('does not apply a brand to Bluetooth headsets without a verified identity', () => {
   const bluetooth: NativeState = {
     ...state,
     usbDevice: null,
     outputs: [
-      { id: 'bt', name: 'H858', receiver: false, transport: 'bluetooth', brand: 'redragon' },
+      { id: 'bt', name: 'H858', receiver: false, transport: 'bluetooth' },
       { id: 'bt-other', name: 'Other headset', receiver: false, transport: 'bluetooth' },
     ],
   };
-  expect(manufacturerForOutput(bluetooth, 'bt').id).toBe('redragon');
+  expect(manufacturerForOutput(bluetooth, 'bt').id).toBe('neutral');
   expect(manufacturerForOutput(bluetooth, 'bt-other').id).toBe('neutral');
 });

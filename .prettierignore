@@ -7,3 +7,4 @@ learn
 
 src-tauri/target
 src-tauri/gen
+public/corrections/index.json

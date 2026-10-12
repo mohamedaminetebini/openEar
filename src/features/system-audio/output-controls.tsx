@@ -1,6 +1,6 @@
 import { Battery, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useApp } from '@/stores/app-store';
+import { outputById, soundFor, useApp } from '@/stores/app-store';
 import { runOperation, selectOutput, useNativeAudio } from './store';
 import type { NativeState } from './schema';
 import { TransportIcon } from './transport-icon';
@@ -10,7 +10,12 @@ import { NoiseControl } from './noise-control';
 import { PairedHeadsets } from './paired-headsets';
 
 function startEq(target: string) {
-  return runOperation({ operation: 'start', target, eq: useApp.getState().eq });
+  const output = outputById(target);
+  return runOperation({
+    operation: 'start',
+    target,
+    eq: output ? soundFor(output) : useApp.getState().eq,
+  });
 }
 
 function outputLabel(output: NativeState['outputs'][number]) {
@@ -84,7 +89,7 @@ export function OutputControls() {
           }
         />
       )}
-      {selectedOutput?.address && (
+      {selectedOutput?.address && selectedOutput.noiseControl && (
         <NoiseControl key={selectedOutput.address} address={selectedOutput.address} />
       )}
       <PairedHeadsets />
